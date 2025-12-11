@@ -3,7 +3,7 @@ export default {
   name: "Speak Practice Loop",
   version: "0.1.0",
   description: "Practice speaking with YouTube loop",
-  permissions: ["sidePanel", "activeTab", "scripting", "storage", "tabs"],
+  permissions: ["sidePanel", "activeTab", "scripting", "storage", "tabs", "audioCapture"],
   host_permissions: ["*://*.youtube.com/*"],
   side_panel: {
     default_path: "sidepanel.html"

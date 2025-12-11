@@ -1,22 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+// 清理旧内容，重新写入完整实现
+import { useEffect, useMemo, useRef } from "react";
 import "./style.css";
 import { Play } from "lucide-react";
+import { useAppStore } from "./store/useAppStore";
+import type { EvaluatedToken, Segment } from "./types";
 
-type Segment = { startSeconds: number; durationSeconds: number; endSeconds: number; text: string };
-
-// Group segments by sentence - exactly like competitor's gi() function
-// Rule: Split when segment contains punctuation AND buffer has >= 5 segments
+// Group segments by punctuation or by duration fallback
 const TERMINATORS = [".", "!", "?", ";"];
 const TERMINATOR_REGEX = new RegExp(`[${TERMINATORS.join("")}]`);
 
 function groupSegments(segments: Segment[], maxChunkLength?: number): Segment[][] {
   const result: Segment[][] = [];
-  
-  // Check if any segment has punctuation
-  const hasPunctuation = segments.some(s => TERMINATOR_REGEX.test(s.text));
-  
+  const hasPunctuation = segments.some((s) => TERMINATOR_REGEX.test(s.text));
+
   if (hasPunctuation) {
-    // Group by punctuation (competitor logic: punctuation + >= 5 segments)
     let buffer: Segment[] = [];
     for (const seg of segments) {
       buffer.push(seg);
@@ -25,12 +22,8 @@ function groupSegments(segments: Segment[], maxChunkLength?: number): Segment[][
         buffer = [];
       }
     }
-    // Flush remaining
-    if (buffer.length > 0) {
-      result.push(buffer);
-    }
+    if (buffer.length > 0) result.push(buffer);
   } else if (maxChunkLength !== undefined) {
-    // No punctuation - group by duration
     let buffer: Segment[] = [];
     let duration = 0;
     for (const seg of segments) {
@@ -42,33 +35,88 @@ function groupSegments(segments: Segment[], maxChunkLength?: number): Segment[][
         duration = 0;
       }
     }
-    if (buffer.length > 0) {
-      result.push(buffer);
-    }
+    if (buffer.length > 0) result.push(buffer);
   } else {
-    // No grouping - all in one
-    if (segments.length > 0) {
-      result.push([...segments]);
-    }
+    if (segments.length > 0) result.push([...segments]);
   }
-  
+
   return result;
 }
 
-export default function SidePanel() {
-  const [tabId, setTabId] = useState<number | null>(null);
-  const [rawSegments, setRawSegments] = useState<Segment[]>([]);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isReady, setIsReady] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const listRef = useRef<HTMLDivElement | null>(null);
+function joinGroupText(group: Segment[]): string {
+  return group.map((s) => s.text).join(" ");
+}
 
-  // Group segments like competitor (memoized)
-  const groupedSegments = useMemo(() => {
-    // Pass a fallback maxChunkLength (e.g. 10 seconds) in case punctuation is missing
-    // This prevents the "one giant block" issue for ASR captions
-    return groupSegments(rawSegments, 10);
-  }, [rawSegments]);
+function tokenize(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
+function normalizeToken(token: string): string {
+  return token.replace(/[^\w']/g, "").toLowerCase();
+}
+
+function evaluateSentence(targetText: string, spokenText: string): EvaluatedToken[] {
+  const targetTokens = tokenize(targetText);
+  const spokenTokens = tokenize(spokenText);
+  const spokenNorm = spokenTokens.map(normalizeToken);
+
+  let spokenIndex = 0;
+
+  return targetTokens.map((tok) => {
+    const norm = normalizeToken(tok);
+    if (!norm) return { text: tok, correct: true };
+
+    while (spokenIndex < spokenNorm.length && !spokenNorm[spokenIndex]) {
+      spokenIndex += 1;
+    }
+
+    const correct = spokenIndex < spokenNorm.length && spokenNorm[spokenIndex] === norm;
+    if (spokenIndex < spokenNorm.length) spokenIndex += 1;
+
+    return { text: tok, correct };
+  });
+}
+
+export default function SidePanel() {
+  const {
+    tabId,
+    rawSegments,
+    currentTime,
+    isReady,
+    autoScroll,
+    playbackRate,
+    selectedGroupIndex,
+    language,
+    isRecording,
+    interimTranscript,
+    finalTranscript,
+    recordingUrl,
+    evaluatedTokens,
+    selectedPracticeWords,
+    setTabId,
+    setRawSegments,
+    setCurrentTime,
+    setIsReady,
+    setAutoScroll,
+    setPlaybackRate,
+    setSelectedGroupIndex,
+    setLanguage,
+    setRecordingState,
+    resetRecording,
+    setEvaluatedTokens,
+    setSelectedPracticeWords
+  } = useAppStore((state) => state);
+
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const groupedSegments = useMemo(() => groupSegments(rawSegments, 10), [rawSegments]);
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res) => {
@@ -79,15 +127,27 @@ export default function SidePanel() {
         if (state && state.segments) setRawSegments(state.segments);
         if (state && typeof state.currentTime === "number") setCurrentTime(state.currentTime);
         if (state && typeof state.isReady === "boolean") setIsReady(state.isReady);
+        if (state && typeof state.speed === "number") setPlaybackRate(state.speed);
+        if (state && typeof state.currentLanguage === "string") setLanguage(state.currentLanguage);
       });
     });
+
     const onMessage = (v: any) => {
       const tid = tabId;
       if (v.tabId !== undefined && tid !== null && v.tabId !== tid) return;
       if (v.type === "spl-segments-updated") setRawSegments(v.segments);
       if (v.type === "spl-state-updated") {
-        if (typeof v.currentTime === "number") setCurrentTime(v.currentTime);
-        if (typeof v.isReady === "boolean") setIsReady(v.isReady);
+        const incomingState = v.state ?? v;
+        if (typeof incomingState.currentTime === "number") setCurrentTime(incomingState.currentTime);
+        if (typeof incomingState.isReady === "boolean") setIsReady(incomingState.isReady);
+        if (typeof incomingState.speed === "number") setPlaybackRate(incomingState.speed);
+        const incomingLang =
+          typeof v.currentLanguage === "string"
+            ? v.currentLanguage
+            : typeof incomingState.currentLanguage === "string"
+              ? incomingState.currentLanguage
+              : null;
+        if (incomingLang) setLanguage(incomingLang);
       }
     };
     chrome.runtime.onMessage.addListener(onMessage);
@@ -96,45 +156,181 @@ export default function SidePanel() {
 
   const playSegment = (seg: Segment) => {
     if (tabId === null) return;
-    chrome.tabs.sendMessage(tabId, { type: "spl-play", time: seg.startSeconds });
+    chrome.tabs.sendMessage(tabId, { type: "spl-play", fromTime: seg.startSeconds, time: seg.startSeconds, tabId });
   };
 
   const playGroup = (group: Segment[]) => {
     if (tabId === null || group.length === 0) return;
-    chrome.tabs.sendMessage(tabId, { type: "spl-play", time: group[0].startSeconds });
+    const start = group[0].startSeconds;
+    const end = group[group.length - 1].endSeconds;
+    chrome.tabs.sendMessage(tabId, { type: "spl-play-period", start, end, loop: false, tabId });
   };
 
-  // Helper to check if a segment is active
-  const isSegmentActive = (seg: Segment) => {
-    return currentTime >= seg.startSeconds && currentTime < seg.endSeconds;
+  const setSpeed = (speed: number) => {
+    setPlaybackRate(speed);
+    if (tabId === null) return;
+    chrome.tabs.sendMessage(tabId, { type: "spl-set-speed", speed, tabId });
   };
 
-  // Helper to check if any segment in group is active
-  const isGroupActive = (group: Segment[]) => {
-    return group.some(isSegmentActive);
-  };
+  const isSegmentActive = (seg: Segment) => currentTime >= seg.startSeconds && currentTime < seg.endSeconds;
+  const isGroupActive = (group: Segment[]) => group.some(isSegmentActive);
 
-  // Auto-scroll
+  const activeGroupIndex = useMemo(() => {
+    for (let i = 0; i < groupedSegments.length; i++) {
+      if (isGroupActive(groupedSegments[i])) return i;
+    }
+    return null;
+  }, [groupedSegments, currentTime]);
+
+  const practiceGroupIndex = selectedGroupIndex ?? activeGroupIndex ?? 0;
+  const practiceGroup = groupedSegments[practiceGroupIndex] ?? [];
+  const practiceText = joinGroupText(practiceGroup);
+  const practiceWords = selectedPracticeWords.length > 0 ? selectedPracticeWords : tokenize(practiceText);
+  const practiceTextForEval = practiceWords.join(" ");
+
+  useEffect(() => {
+    const listEl = listRef.current;
+    if (!listEl) return;
+
+    const handleSelection = () => {
+      const sel = window.getSelection();
+      if (!sel) return;
+      const text = sel.toString();
+      if (!text.trim()) {
+        setSelectedPracticeWords([]);
+        return;
+      }
+      const selectedParts = text
+        .split(/\s+/)
+        .map((t) => t.replace(/[^A-Za-z']/g, "").toLowerCase())
+        .filter((t) => t.length > 0);
+
+      if (selectedParts.length === 0) {
+        setSelectedPracticeWords([]);
+        return;
+      }
+
+      const baseWords = tokenize(joinGroupText(practiceGroup));
+      const chosen = baseWords.filter((w) => {
+        const norm = normalizeToken(w);
+        return norm && selectedParts.some((p) => norm.includes(p));
+      });
+
+      setSelectedPracticeWords(chosen);
+    };
+
+    listEl.addEventListener("mouseup", handleSelection);
+    listEl.addEventListener("keyup", handleSelection);
+    return () => {
+      listEl.removeEventListener("mouseup", handleSelection);
+      listEl.removeEventListener("keyup", handleSelection);
+    };
+  }, [practiceGroup, setSelectedPracticeWords]);
+
   useEffect(() => {
     if (!autoScroll || !listRef.current) return;
     const activeEl = listRef.current.querySelector('[data-active="true"]');
-    if (activeEl) {
-      activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    if (activeEl) activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [currentTime, autoScroll]);
+
+  useEffect(() => {
+    if (!practiceTextForEval || !finalTranscript) {
+      setEvaluatedTokens([]);
+      return;
+    }
+    setEvaluatedTokens(evaluateSentence(practiceTextForEval, finalTranscript));
+  }, [practiceTextForEval, finalTranscript, setEvaluatedTokens]);
+
+  const stopRecordingInternal = () => {
+    setRecordingState({ isRecording: false });
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+    }
+  };
+
+  const handleSpeakClick = async () => {
+    if (isRecording) {
+      stopRecordingInternal();
+      return;
+    }
+
+    resetRecording();
+    setSelectedPracticeWords([]);
+    setEvaluatedTokens([]);
+
+    const SpeechRecognition: any =
+      (typeof window !== "undefined" && (window as any).SpeechRecognition) ||
+      (typeof window !== "undefined" && (window as any).webkitSpeechRecognition) ||
+      null;
+
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onresult = (event: any) => {
+        let interim = "";
+        let final = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          const text = res[0].transcript as string;
+          if (res.isFinal) final += text + " ";
+          else interim += text + " ";
+        }
+        setRecordingState((prev) => ({
+          ...prev,
+          interimTranscript: interim.trim(),
+          finalTranscript: (prev.finalTranscript + " " + final).trim()
+        }));
+      };
+      recognition.onerror = () => {
+        stopRecordingInternal();
+      };
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+      } catch {}
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        if (chunks.length === 0) return;
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setRecordingState({ recordingUrl: url });
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingState({ isRecording: true });
+    } catch {
+      stopRecordingInternal();
+    }
+  };
 
   if (!isReady && rawSegments.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        No segments available
-      </div>
+      <div className="flex items-center justify-center h-full text-muted-foreground">No segments available</div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header - Exact Replica */}
-      <header className="p-4 flex-shrink-0">
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      <header className="px-6 pt-6 pb-4 flex-shrink-0">
         <h1 className="text-xl font-bold text-foreground">Speak Practice Loop</h1>
         <div className="flex flex-row gap-2 justify-between items-center mt-2">
           <div className="text-sm text-muted-foreground">1. Listen to the text</div>
@@ -143,80 +339,168 @@ export default function SidePanel() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-h-0 overflow-hidden p-6 pt-0 rounded-lg shadow border-t border-border bg-card flex flex-col">
-        <article 
-          ref={listRef}
-          className="prose prose-lg dark:prose-invert text-foreground space-y-3 p-4 flex-1 min-h-0 overflow-y-auto max-w-none scroll-smooth snap-y snap-proximity"
-        >
-          {groupedSegments.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              No segments available
-            </div>
-          ) : (
-            groupedSegments.map((group, groupIndex) => {
-              const groupActive = isGroupActive(group);
-              return (
-                <div 
-                  key={groupIndex} 
-                  className={`flex flex-col justify-between p-2 rounded-lg border-2 transition-all ${
-                    groupActive 
-                      ? 'snap-start border-blue-500 bg-card' 
-                      : 'border-transparent hover:bg-muted/50'
-                  }`}
-                  data-active={groupActive}
-                  data-idx={groupIndex}
-                >
-                  <div className="flex flex-row items-start gap-2">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        playGroup(group);
-                      }}
-                      className="flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-1"
-                    >
-                      <Play className="size-4" />
-                    </button>
-                    <p className="text-foreground leading-relaxed">
-                      {group.map((seg, segIndex) => {
-                        const active = isSegmentActive(seg);
-                        return (
-                          <span key={segIndex}>
-                            <span 
-                              className={`cursor-pointer text-foreground ${active ? 'underline decoration-blue-500 decoration-2 underline-offset-2' : ''}`}
-                              data-segment-start-seconds={seg.startSeconds}
-                              data-segment-end-seconds={seg.endSeconds}
-                              onClick={() => playSegment(seg)}
-                            >
-                              {seg.text}
+      <div className="flex-1 min-h-0 flex flex-col gap-4 px-6 pb-6 overflow-hidden">
+        {/* Upper half: transcript list */}
+        <div className="flex-1 basis-1/2 min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6">
+          <article
+            ref={listRef}
+            className="prose prose-lg dark:prose-invert text-foreground space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-w-none scroll-smooth snap-y snap-proximity"
+          >
+            {groupedSegments.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground">No segments available</div>
+            ) : (
+              groupedSegments.map((group, groupIndex) => {
+                const groupActive = isGroupActive(group);
+                return (
+                  <div
+                    key={groupIndex}
+                    className={`flex flex-col justify-between p-2 rounded-lg border-2 transition-all ${
+                      groupActive ? "snap-start border-blue-500 bg-card" : "border-transparent hover:bg-muted/50"
+                    }`}
+                    data-active={groupActive}
+                    data-idx={groupIndex}
+                    onClick={() => setSelectedGroupIndex(groupIndex)}
+                  >
+                    <div className="flex flex-row items-start gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playGroup(group);
+                          setSelectedGroupIndex(groupIndex);
+                        }}
+                        className="flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-1"
+                        aria-label="Play line"
+                      >
+                        <Play className="size-4" />
+                      </button>
+                      <p className="text-foreground leading-relaxed">
+                        {group.map((seg, segIndex) => {
+                          const active = isSegmentActive(seg);
+                          return (
+                            <span key={segIndex}>
+                              <span
+                                className={`cursor-pointer text-foreground ${
+                                  active ? "underline decoration-blue-500 decoration-2 underline-offset-2" : ""
+                                }`}
+                                data-segment-start-seconds={seg.startSeconds}
+                                data-segment-end-seconds={seg.endSeconds}
+                                onClick={() => playSegment(seg)}
+                              >
+                                {seg.text}
+                              </span>
+                              {segIndex < group.length - 1 && <span> </span>}
                             </span>
-                            {segIndex < group.length - 1 && <span> </span>}
-                          </span>
-                        );
-                      })}
-                    </p>
+                          );
+                        })}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </article>
-        
-        {/* Footer Controls - Simplified Replica */}
-        <div className="p-4 border-t border-border bg-background mt-auto">
-          <div className="flex items-center justify-end gap-2 mb-4">
-             <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={autoScroll} 
-                onChange={e => setAutoScroll(e.target.checked)}
+                );
+              })
+            )}
+          </article>
+        </div>
+
+        {/* Lower half: controls and practice */}
+        <div className="flex-1 basis-1/2 min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={(e) => setAutoScroll(e.target.checked)}
                 className="rounded border-primary"
               />
               Auto-scroll
             </label>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="px-2 py-1 rounded-md border border-border">{language ?? "--"}</span>
+              <button className="px-3 py-1 rounded-md border border-border hover:bg-muted transition-colors">Translate</button>
+            </div>
           </div>
-          <div className="rounded-lg border bg-card p-6 text-center">
-             <p className="text-muted-foreground text-sm">Select text above to start practicing</p>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSpeed(1)}
+                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 ${
+                  playbackRate === 1 ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
+                }`}
+              >
+                <span>1x</span>
+              </button>
+              <button
+                onClick={() => setSpeed(0.5)}
+                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 ${
+                  playbackRate === 0.5 ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
+                }`}
+              >
+                <span>0.5x</span>
+              </button>
+            </div>
+            <button
+              onClick={handleSpeakClick}
+              className={`flex-1 max-w-xs h-10 rounded-md text-sm font-medium flex items-center justify-center transition-colors ${
+                isRecording ? "bg-red-600 text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }`}
+            >
+              {isRecording ? "Stop" : "Speak"}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <button
+                disabled={!recordingUrl}
+                onClick={() => {
+                  if (!audioRef.current || !recordingUrl) return;
+                  audioRef.current.currentTime = 0;
+                  audioRef.current.play();
+                }}
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-md border text-sm transition-colors ${
+                  recordingUrl ? "hover:bg-muted" : "opacity-60 cursor-not-allowed"
+                }`}
+              >
+                <Play className="w-4 h-4" />
+                <span>My Recording</span>
+              </button>
+              <audio ref={audioRef} src={recordingUrl ?? undefined} className="hidden" />
+            </div>
+            <div className="text-xs text-muted-foreground min-h-[20px]">
+              {isRecording ? `录音中... ${interimTranscript}` : recordingUrl ? "可回放最近录音" : "暂无录音"}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-card p-4 min-h-[140px] flex flex-col gap-2 overflow-y-auto">
+            <div>
+              <p className="text-xs text-muted-foreground">当前练习句</p>
+              <p className="text-sm text-foreground leading-relaxed">{practiceWords.length ? practiceWords.join(" ") : "Select text above to start practicing"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">录音识别</p>
+              <p className="text-sm text-muted-foreground leading-relaxed min-h-[20px]">
+                {finalTranscript || interimTranscript || "Speak 开始录音与识别"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {evaluatedTokens.length === 0 ? (
+                <span className="text-muted-foreground text-sm">Speak to see feedback</span>
+              ) : (
+                evaluatedTokens.map((tok, idx) => (
+                  <span
+                    key={idx}
+                    className={`px-1.5 py-0.5 rounded-md text-sm ${
+                      tok.correct ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+                    }`}
+                  >
+                    {tok.text}
+                  </span>
+                ))
+              )}
+            </div>
+            {isRecording && (
+              <p className="text-xs text-muted-foreground">Listening... {interimTranscript}</p>
+            )}
           </div>
         </div>
       </div>

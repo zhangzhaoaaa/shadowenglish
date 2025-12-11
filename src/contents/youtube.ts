@@ -93,7 +93,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (video && typeof msg.start === "number" && typeof msg.end === "number") {
         periodStart = Math.max(0, msg.start);
         periodEnd = Math.max(periodStart, msg.end);
-        loopActive = !!msg.loop;
+        loopActive = true; // ensure timeupdate checks and pauses when playOnceActive
         playOnceActive = !msg.loop;
         video.currentTime = periodStart;
         video.play();
