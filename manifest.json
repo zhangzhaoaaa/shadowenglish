@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Speak Practice Loop (Restored)",
+  "version": "1.0.2",
+  "description": "Restored from build artifacts. Practice speaking with YouTube loop.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js", "*.js", "*.css", "*.html"],
+      "matches": ["*://*.youtube.com/*"]
+    }
+  ]
+}
