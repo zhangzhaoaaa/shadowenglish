@@ -1,9 +1,45 @@
 // 清理旧内容，重新写入完整实现
 import { useEffect, useMemo, useRef } from "react";
 import "./style.css";
-import { Play } from "lucide-react";
+import { Play, Settings } from "lucide-react";
 import { useAppStore } from "./store/useAppStore";
 import type { EvaluatedToken, Segment } from "./types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
+
+const TARGET_LANGUAGES = [
+  { code: "ar", label: "Arabic" },
+  { code: "bn", label: "Bengali" },
+  { code: "zh-CN", label: "Chinese (Simplified)" },
+  { code: "zh-TW", label: "Chinese (Traditional)" },
+  { code: "cs", label: "Czech" },
+  { code: "da", label: "Danish" },
+  { code: "nl", label: "Dutch" },
+  { code: "en", label: "English" },
+  { code: "tl", label: "Filipino" },
+  { code: "fi", label: "Finnish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "el", label: "Greek" },
+  { code: "hi", label: "Hindi" },
+  { code: "hu", label: "Hungarian" },
+  { code: "id", label: "Indonesian" },
+  { code: "it", label: "Italian" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "ms", label: "Malay" },
+  { code: "no", label: "Norwegian" },
+  { code: "pl", label: "Polish" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ro", label: "Romanian" },
+  { code: "ru", label: "Russian" },
+  { code: "es", label: "Spanish" },
+  { code: "sv", label: "Swedish" },
+  { code: "th", label: "Thai" },
+  { code: "tr", label: "Turkish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "vi", label: "Vietnamese" },
+];
 
 // Group segments by punctuation or by duration fallback
 const TERMINATORS = [".", "!", "?", ";"];
@@ -123,6 +159,7 @@ export default function SidePanel() {
     playbackRate,
     selectedGroupIndex,
     language,
+    targetLanguage,
     isRecording,
     interimTranscript,
     finalTranscript,
@@ -137,6 +174,7 @@ export default function SidePanel() {
     setPlaybackRate,
     setSelectedGroupIndex,
     setLanguage,
+    setTargetLanguage,
     setRecordingState,
     resetRecording,
     setEvaluatedTokens,
@@ -336,6 +374,21 @@ export default function SidePanel() {
     setEvaluatedTokens(evaluateSentence(practiceTextForEval, finalTranscript));
   }, [practiceTextForEval, finalTranscript, setEvaluatedTokens]);
 
+  const handleTranslate = () => {
+    if (!hasPractice) return;
+    const text = practiceWords.join(" ");
+    
+    // Use user selected target language
+    const targetLang = targetLanguage || "zh-CN";
+
+    const url = `https://translate.google.com/?sl=auto&tl=${targetLang}&text=${encodeURIComponent(text)}&op=translate`;
+    const width = 1000;
+    const height = 800;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    window.open(url, "google_translate", `width=${width},height=${height},left=${left},top=${top}`);
+  };
+
   const stopRecordingInternal = () => {
     setRecordingState({ isRecording: false });
     if (recognitionRef.current) {
@@ -514,9 +567,55 @@ export default function SidePanel() {
               Auto-scroll
             </label>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="px-2 py-1 rounded-md border border-border">{language ?? "--"}</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-2 px-3 py-1 rounded-full border border-border hover:bg-muted transition-colors h-8 text-xs">
+                    <Settings className="w-3.5 h-3.5" />
+                    <span className="font-medium">
+                      {TARGET_LANGUAGES.find((t) => t.code === targetLanguage)?.code.substring(0, 2).toUpperCase() ?? "EN"}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-4" align="end">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm leading-none">Settings</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Customize your learning experience
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">My Language</label>
+                      <Select value={targetLanguage} onValueChange={setTargetLanguage}>
+                        <SelectTrigger className="w-full h-8 text-xs">
+                          <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px]">
+                          {TARGET_LANGUAGES.map((lang) => (
+                            <SelectItem key={lang.code} value={lang.code} className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground w-5 text-left text-[10px]">
+                                  {lang.code.substring(0, 2).toUpperCase()}
+                                </span>
+                                <span>{lang.label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Placeholder for future settings */}
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-[10px] text-muted-foreground text-center">
+                        More settings coming soon...
+                      </p>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <button
-                className="px-3 py-1 rounded-md border border-border hover:bg-muted transition-colors"
+                onClick={handleTranslate}
+                className="px-3 py-1 rounded-md border border-border hover:bg-muted transition-colors h-8 text-xs"
                 disabled={!hasPractice}
               >
                 Translate
