@@ -1,8 +1,32 @@
 const SIDE_PANEL_PATH = "sidepanel.html";
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   chrome.sidePanel.setOptions({ enabled: false }); // Disable side panel globally by default
+
+  // Inject content script into existing YouTube tabs
+  const manifest = chrome.runtime.getManifest();
+  const contentScripts = manifest.content_scripts;
+
+  if (contentScripts) {
+    for (const cs of contentScripts) {
+      // Find tabs that match the content script patterns
+      const tabs = await chrome.tabs.query({ url: cs.matches });
+      for (const tab of tabs) {
+        if (tab.id && cs.js && cs.js.length > 0) {
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: cs.js,
+            });
+            console.log(`[Background] Injected content scripts into tab ${tab.id}`);
+          } catch (err) {
+            console.error(`[Background] Failed to inject content scripts into tab ${tab.id}:`, err);
+          }
+        }
+      }
+    }
+  }
 });
 
 const isAllowedUrl = (url: string) => {

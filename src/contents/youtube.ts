@@ -28,9 +28,11 @@ const injectCaptionsScript = () => {
 };
 
 try {
-  chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res) => {
-    if (res && typeof res.tabId === "number") currentTabId = res.tabId;
-  });
+  if (chrome.runtime?.id) {
+    chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res) => {
+      if (res && typeof res.tabId === "number") currentTabId = res.tabId;
+    });
+  }
 } catch {}
 
 const stopLoopTimer = () => {
@@ -62,6 +64,14 @@ const ensureLoopTimer = () => {
 };
 
 const handleProgress = () => {
+  if (!chrome.runtime?.id) {
+    if (video) {
+      video.ontimeupdate = null;
+      video.onplay = null;
+      video.onpause = null;
+    }
+    return;
+  }
   if (!video) return;
   const currentSpeed = video.playbackRate;
   let currentTime = video.currentTime;
@@ -96,6 +106,7 @@ const requestCaptions = () => {
   setTimeout(() => window.postMessage({ type: "SPL_REQUEST_CAPTIONS" }, "*"), 800);
   setTimeout(() => window.postMessage({ type: "SPL_REQUEST_CAPTIONS" }, "*"), 1800);
 };
+
 const initVideo = () => {
   video = findVideo();
   if (video) {
@@ -108,6 +119,7 @@ const initVideo = () => {
 };
 
 window.addEventListener("message", (event) => {
+  if (!chrome.runtime?.id) return;
   if (event.source !== window) return;
   if (event.data && event.data.type === "SPL_CAPTIONS_FOUND") {
     const payload = event.data.payload || {};
@@ -124,7 +136,7 @@ window.addEventListener("message", (event) => {
     if (currentTabId != null) msg.tabId = currentTabId;
     msg.videoId = incomingVideoId ?? currentVideoId;
     console.log('[SPL] cs: forwarding segments to sidepanel', captions.length);
-    chrome.runtime.sendMessage(msg);
+    chrome.runtime.sendMessage(msg).catch(() => {});
   }
 });
 
@@ -187,6 +199,7 @@ initVideo();
 
 let lastUrl = location.href;
 new MutationObserver(() => {
+  if (!chrome.runtime?.id) return;
   const url = location.href;
   if (url !== lastUrl) {
     lastUrl = url;
@@ -194,6 +207,6 @@ new MutationObserver(() => {
     currentLanguage = "en";
     initVideo();
     requestCaptions();
-    chrome.runtime.sendMessage({ type: "spl-segments-updated", segments: [], videoId: new URLSearchParams(window.location.search).get("v"), tabId: currentTabId ?? undefined });
+    chrome.runtime.sendMessage({ type: "spl-segments-updated", segments: [], videoId: new URLSearchParams(window.location.search).get("v"), tabId: currentTabId ?? undefined }).catch(() => {});
   }
 }).observe(document, { subtree: true, childList: true });
