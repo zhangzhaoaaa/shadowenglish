@@ -58,6 +58,25 @@ function normalizeToken(token: string): string {
   return token.replace(/[^\w']/g, "").toLowerCase();
 }
 
+function tokenSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const m = a.length;
+  const n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  const dist = dp[m][n];
+  const maxLen = Math.max(m, n) || 1;
+  return 1 - dist / maxLen;
+}
+
 function evaluateSentence(targetText: string, spokenText: string): EvaluatedToken[] {
   const targetTokens = tokenize(targetText);
   const spokenTokens = tokenize(spokenText);
@@ -67,16 +86,22 @@ function evaluateSentence(targetText: string, spokenText: string): EvaluatedToke
 
   return targetTokens.map((tok) => {
     const norm = normalizeToken(tok);
-    if (!norm) return { text: tok, correct: true };
+    if (!norm) return { text: tok, status: "correct" };
 
     while (spokenIndex < spokenNorm.length && !spokenNorm[spokenIndex]) {
       spokenIndex += 1;
     }
 
-    const correct = spokenIndex < spokenNorm.length && spokenNorm[spokenIndex] === norm;
-    if (spokenIndex < spokenNorm.length) spokenIndex += 1;
+    let status: "correct" | "partial" | "wrong" = "wrong";
+    if (spokenIndex < spokenNorm.length) {
+      const sim = tokenSimilarity(norm, spokenNorm[spokenIndex]);
+      if (sim >= 0.85) status = "correct";
+      else if (sim >= 0.6) status = "partial";
+      else status = "wrong";
+      spokenIndex += 1;
+    }
 
-    return { text: tok, correct };
+    return { text: tok, status };
   });
 }
 
@@ -115,6 +140,7 @@ export default function SidePanel() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const permissionToastRef = useRef<number | null>(null);
 
   const groupedSegments = useMemo(() => groupSegments(rawSegments, 10), [rawSegments]);
 
@@ -317,8 +343,14 @@ export default function SidePanel() {
       mediaRecorderRef.current = recorder;
       recorder.start();
       setRecordingState({ isRecording: true });
-    } catch {
+    } catch (err: any) {
+      console.error("getUserMedia failed", err);
       stopRecordingInternal();
+      // 简易权限提示
+      const msg = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError"
+        ? "麦克风权限被拒绝，请在浏览器地址栏右侧开启麦克风权限后重试"
+        : "无法访问麦克风，请检查权限或设备后重试";
+      alert(msg);
     }
   };
 
@@ -341,7 +373,7 @@ export default function SidePanel() {
 
       <div className="flex-1 min-h-0 flex flex-col gap-4 px-6 pb-6 overflow-hidden">
         {/* Upper half: transcript list */}
-        <div className="flex-1 basis-1/2 min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6">
+        <div className="flex-none basis-[45%] min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6">
           <article
             ref={listRef}
             className="prose prose-lg dark:prose-invert text-foreground space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-w-none scroll-smooth snap-y snap-proximity"
@@ -402,7 +434,7 @@ export default function SidePanel() {
         </div>
 
         {/* Lower half: controls and practice */}
-        <div className="flex-1 basis-1/2 min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
+        <div className="flex-none basis-[55%] min-h-0 overflow-hidden overflow-y-auto rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
               <input
@@ -471,7 +503,7 @@ export default function SidePanel() {
             </div>
           </div>
 
-          <div className="rounded-lg border bg-card p-4 min-h-[140px] flex flex-col gap-2 overflow-y-auto">
+          <div className="rounded-lg border bg-card p-4 min-h-[180px] flex flex-col gap-2 overflow-visible">
             <div>
               <p className="text-xs text-muted-foreground">当前练习句</p>
               <p className="text-sm text-foreground leading-relaxed">{practiceWords.length ? practiceWords.join(" ") : "Select text above to start practicing"}</p>
@@ -486,16 +518,19 @@ export default function SidePanel() {
               {evaluatedTokens.length === 0 ? (
                 <span className="text-muted-foreground text-sm">Speak to see feedback</span>
               ) : (
-                evaluatedTokens.map((tok, idx) => (
-                  <span
-                    key={idx}
-                    className={`px-1.5 py-0.5 rounded-md text-sm ${
-                      tok.correct ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
-                    }`}
-                  >
-                    {tok.text}
-                  </span>
-                ))
+                evaluatedTokens.map((tok, idx) => {
+                  const color =
+                    tok.status === "correct"
+                      ? "bg-emerald-600"
+                      : tok.status === "partial"
+                        ? "bg-amber-500"
+                        : "bg-red-600";
+                  return (
+                    <span key={idx} className={`px-1.5 py-0.5 rounded-md text-sm ${color} text-white`}>
+                      {tok.text}
+                    </span>
+                  );
+                })
               )}
             </div>
             {isRecording && (

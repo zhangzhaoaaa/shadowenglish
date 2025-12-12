@@ -7,5 +7,5 @@ export type Segment = {
 
 export type EvaluatedToken = {
   text: string
-  correct: boolean
+  status: "correct" | "partial" | "wrong"
 }
