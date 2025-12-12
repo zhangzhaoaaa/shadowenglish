@@ -1,5 +1,8 @@
 // 清理旧内容，重新写入完整实现
-import { useEffect, useMemo, useRef } from "react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const chrome: any;
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import "./style.css";
 import { Play, Settings } from "lucide-react";
 import { useAppStore } from "./store/useAppStore";
@@ -189,15 +192,37 @@ export default function SidePanel() {
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const permissionToastRef = useRef<number | null>(null);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const [topRatio, setTopRatio] = useState(0.55);
+  const isDraggingRef = useRef(false);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const handlePointerMove = useCallback((ev: PointerEvent) => {
+    if (!isDraggingRef.current) return;
+    const host = splitRef.current;
+    if (!host) return;
+    const rect = host.getBoundingClientRect();
+    const ratio = clamp((ev.clientY - rect.top) / rect.height, 0.15, 0.85);
+    setTopRatio(ratio);
+    ev.preventDefault();
+  }, []);
+
+  const stopDrag = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    window.removeEventListener("pointermove", handlePointerMove, true);
+    window.removeEventListener("pointerup", stopDrag, true);
+  }, [handlePointerMove]);
 
   const groupedSegments = useMemo(() => groupSegments(rawSegments, 10), [rawSegments]);
 
   useEffect(() => {
-    chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res) => {
+    chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res: any) => {
       if (res && typeof res.tabId === "number") setTabId(res.tabId);
       const msg: any = { type: "spl-get-initial-state" };
       if (res && typeof res.tabId === "number") msg.tabId = res.tabId;
-      chrome.runtime.sendMessage(msg, (state) => {
+      chrome.runtime.sendMessage(msg, (state: any) => {
         if (state && state.segments) setRawSegments(state.segments);
         if (state && typeof state.currentTime === "number") setCurrentTime(state.currentTime);
         if (state && typeof state.isReady === "boolean") setIsReady(state.isReady);
@@ -485,6 +510,20 @@ export default function SidePanel() {
     }
   };
 
+  const onHandlePointerDown = useCallback(
+    (ev: ReactPointerEvent<HTMLDivElement>) => {
+      const host = splitRef.current;
+      if (!host) return;
+      isDraggingRef.current = true;
+      window.addEventListener("pointermove", handlePointerMove, { capture: true, passive: false });
+      window.addEventListener("pointerup", stopDrag, { capture: true });
+      ev.preventDefault();
+    },
+    [handlePointerMove, stopDrag]
+  );
+
+  useEffect(() => stopDrag, [stopDrag]);
+
   if (!isReady && rawSegments.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">No segments available</div>
@@ -502,74 +541,90 @@ export default function SidePanel() {
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-4 px-6 pb-6 overflow-hidden">
-        {/* Upper half: transcript list */}
-        <div className="flex-none basis-[45%] min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6">
-          <article
-            ref={listRef}
-            className="prose prose-lg dark:prose-invert text-foreground space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-w-none scroll-smooth snap-y snap-proximity text-lg"
-          >
-            {groupedSegments.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No segments available</div>
-            ) : (
-              groupedSegments.map((group, groupIndex) => {
-                const groupActive = isGroupActive(group);
-                return (
-                  <div
-                    key={groupIndex}
-                    className={`flex flex-col justify-between p-2 rounded-lg border-2 transition-all ${
-                      groupActive ? "snap-start border-blue-500 bg-card" : "border-transparent hover:bg-muted/50"
-                    }`}
-                    data-active={groupActive}
-                    data-idx={groupIndex}
-                    onClick={() => setSelectedGroupIndex(groupIndex)}
-                  >
-                    <div className="flex flex-row items-start gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playGroup(group);
-                          setSelectedGroupIndex(groupIndex);
-                          setSelectedPracticeWords([]);
-                          resetRecording();
-                          setEvaluatedTokens([]);
-                        }}
-                        className="flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-1"
-                        aria-label="Play line"
-                      >
-                        <Play className="size-4" />
-                      </button>
-                      <p className="text-foreground leading-relaxed">
-                        {group.map((seg, segIndex) => {
-                          const active = isSegmentActive(seg);
-                          return (
-                            <span key={segIndex}>
-                              <span
-                                className={`cursor-pointer text-foreground ${
-                                  active ? "underline decoration-blue-500 decoration-2 underline-offset-2" : ""
-                                }`}
-                                data-segment-start-seconds={seg.startSeconds}
-                                data-segment-end-seconds={seg.endSeconds}
-                                onClick={() => playSegment(seg)}
-                              >
-                                {seg.text}
+      <div ref={splitRef} className="flex-1 min-h-0 flex flex-col px-6 pb-6 overflow-hidden">
+        <div
+          className="flex flex-col min-h-0"
+          style={{ flexBasis: `${topRatio * 100}%`, minHeight: "15%" }}
+        >
+          {/* Upper half: transcript list */}
+          <div className="h-full min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6">
+            <article
+              ref={listRef}
+              className="prose prose-lg dark:prose-invert text-foreground space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-w-none scroll-smooth snap-y snap-proximity text-lg"
+            >
+              {groupedSegments.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">No segments available</div>
+              ) : (
+                groupedSegments.map((group, groupIndex) => {
+                  const groupActive = isGroupActive(group);
+                  return (
+                    <div
+                      key={groupIndex}
+                      className={`flex flex-col justify-between p-2 rounded-lg border-2 transition-all ${
+                        groupActive ? "snap-start border-blue-500 bg-card" : "border-transparent hover:bg-muted/50"
+                      }`}
+                      data-active={groupActive}
+                      data-idx={groupIndex}
+                      onClick={() => setSelectedGroupIndex(groupIndex)}
+                    >
+                      <div className="flex flex-row items-start gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playGroup(group);
+                            setSelectedGroupIndex(groupIndex);
+                            setSelectedPracticeWords([]);
+                            resetRecording();
+                            setEvaluatedTokens([]);
+                          }}
+                          className="flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-1"
+                          aria-label="Play line"
+                        >
+                          <Play className="size-4" />
+                        </button>
+                        <p className="text-foreground leading-relaxed">
+                          {group.map((seg, segIndex) => {
+                            const active = isSegmentActive(seg);
+                            return (
+                              <span key={segIndex}>
+                                <span
+                                  className={`cursor-pointer text-foreground ${
+                                    active ? "underline decoration-blue-500 decoration-2 underline-offset-2" : ""
+                                  }`}
+                                  data-segment-start-seconds={seg.startSeconds}
+                                  data-segment-end-seconds={seg.endSeconds}
+                                  onClick={() => playSegment(seg)}
+                                >
+                                  {seg.text}
+                                </span>
+                                {segIndex < group.length - 1 && <span> </span>}
                               </span>
-                              {segIndex < group.length - 1 && <span> </span>}
-                            </span>
-                          );
-                        })}
-                      </p>
+                            );
+                          })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })
-            )}
-          </article>
+                  );
+                })
+              )}
+            </article>
+          </div>
         </div>
 
-        {/* Lower half: controls and practice */}
-        <div className="flex-1 min-h-0 overflow-y-auto rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div
+          className="relative z-50 flex h-4 w-full items-center justify-center bg-transparent hover:bg-muted/50 transition-colors cursor-row-resize shrink-0 focus:outline-none"
+          onPointerDown={onHandlePointerDown}
+        >
+          <div className="h-1 w-12 rounded-full bg-border" />
+        </div>
+
+        <div
+          className="flex flex-col min-h-0"
+          style={{ flexBasis: `${(1 - topRatio) * 100}%`, minHeight: "15%" }}
+        >
+          {/* Lower half: controls and practice */}
+          <div className="h-full min-h-0 overflow-y-auto rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -731,6 +786,7 @@ export default function SidePanel() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
