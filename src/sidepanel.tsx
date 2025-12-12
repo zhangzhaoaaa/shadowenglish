@@ -262,30 +262,55 @@ export default function SidePanel() {
     const listEl = listRef.current;
     if (!listEl) return;
 
+    const findGroupIndex = (node: Node | null): number | null => {
+      let cur: Node | null = node;
+      while (cur && cur !== listEl) {
+        if (cur instanceof HTMLElement) {
+          const idxAttr = cur.getAttribute("data-idx");
+          if (idxAttr !== null) return Number(idxAttr);
+        }
+        cur = cur.parentNode;
+      }
+      return null;
+    };
+
     const handleSelection = () => {
       const sel = window.getSelection();
       if (!sel) return;
       const text = sel.toString();
       if (!text.trim()) {
+        resetRecording();
+        setEvaluatedTokens([]);
         setSelectedPracticeWords([]);
         return;
       }
+
       const selectedParts = text
         .split(/\s+/)
         .map((t) => t.replace(/[^A-Za-z']/g, "").toLowerCase())
         .filter((t) => t.length > 0);
 
       if (selectedParts.length === 0) {
+        resetRecording();
+        setEvaluatedTokens([]);
         setSelectedPracticeWords([]);
         return;
       }
 
-      const baseWords = tokenize(joinGroupText(practiceGroup));
+      const anchorIdx = findGroupIndex(sel.anchorNode);
+      const focusIdx = findGroupIndex(sel.focusNode);
+      const targetIdx = focusIdx ?? anchorIdx ?? practiceGroupIndex;
+      if (targetIdx !== null) setSelectedGroupIndex(targetIdx);
+
+      const targetGroup = targetIdx !== null ? groupedSegments[targetIdx] : practiceGroup;
+      const baseWords = tokenize(joinGroupText(targetGroup ?? practiceGroup));
       const chosen = baseWords.filter((w) => {
         const norm = normalizeToken(w);
         return norm && selectedParts.some((p) => norm.includes(p));
       });
 
+      resetRecording();
+      setEvaluatedTokens([]);
       setSelectedPracticeWords(chosen);
     };
 
@@ -295,7 +320,7 @@ export default function SidePanel() {
       listEl.removeEventListener("mouseup", handleSelection);
       listEl.removeEventListener("keyup", handleSelection);
     };
-  }, [practiceGroup, setSelectedPracticeWords]);
+  }, [groupedSegments, practiceGroup, practiceGroupIndex, resetRecording, setEvaluatedTokens, setSelectedGroupIndex, setSelectedPracticeWords]);
 
   useEffect(() => {
     if (!autoScroll || !listRef.current) return;
@@ -333,7 +358,6 @@ export default function SidePanel() {
     }
 
     resetRecording();
-    setSelectedPracticeWords([]);
     setEvaluatedTokens([]);
 
     const SpeechRecognition: any =
