@@ -1,5 +1,5 @@
 {
-  "name": "speak-practice-loop-plasmo",
+  "name": "shadow-language-practice",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -32,8 +32,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "manifest": {
-    "name": "Speak Practice Loop",
-    "description": "Practice speaking with YouTube loop",
+    "name": "Shadowing language with YouTube Loop",
+    "description": "Practice speaking a language by looping segments of YouTube videos with transcripts in a side panel.",
     "permissions": [
       "sidePanel",
       "activeTab",

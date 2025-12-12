@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Speak Practice Loop (Restored)",
+  "name": "Shadowing language practice",
   "version": "1.0.2",
-  "description": "Restored from build artifacts. Practice speaking with YouTube loop.",
+  "description": "Practice speaking a language by looping segments of YouTube videos with transcripts in a side panel.",
   "permissions": [
     "sidePanel",
     "activeTab",
