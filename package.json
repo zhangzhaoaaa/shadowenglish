@@ -1,5 +1,5 @@
 {
-  "name": "shadow-language-practice",
+  "name": "shadowing-practice",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -32,7 +32,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "manifest": {
-    "name": "Shadowing language with YouTube Loop",
+    "name": "Shadowing with YouTube Loop",
     "description": "Practice speaking a language by looping segments of YouTube videos with transcripts in a side panel.",
     "permissions": [
       "sidePanel",
