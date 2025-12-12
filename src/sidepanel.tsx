@@ -163,6 +163,59 @@ function evaluateSentence(targetText: string, spokenText: string): EvaluatedToke
   });
 }
 
+function encodeWavFromAudioBuffer(audioBuffer: AudioBuffer): ArrayBuffer {
+  const { numberOfChannels, length, sampleRate } = audioBuffer;
+  const bytesPerSample = 2;
+  const blockAlign = numberOfChannels * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + length * blockAlign);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + length * blockAlign, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numberOfChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, length * blockAlign, true);
+
+  const channelData: Float32Array[] = [];
+  for (let ch = 0; ch < numberOfChannels; ch++) {
+    channelData.push(audioBuffer.getChannelData(ch));
+  }
+
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    for (let ch = 0; ch < numberOfChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channelData[ch][i]));
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, intSample, true);
+      offset += 2;
+    }
+  }
+
+  return buffer;
+}
+
+async function webmToWavBlob(recordingUrl: string): Promise<Blob> {
+  const response = await fetch(recordingUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const audioCtx = new AudioContext();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const wavBuffer = encodeWavFromAudioBuffer(audioBuffer);
+  await audioCtx.close();
+  return new Blob([wavBuffer], { type: "audio/wav" });
+}
+
 export default function SidePanel() {
   const {
     tabId,
@@ -207,6 +260,7 @@ export default function SidePanel() {
   const permissionToastRef = useRef<number | null>(null);
   const splitRef = useRef<HTMLDivElement | null>(null);
   const [topRatio, setTopRatio] = useState(0.55);
+  const [isExportingWav, setIsExportingWav] = useState(false);
   const isDraggingRef = useRef(false);
   const lastConfettiKeyRef = useRef<string | null>(null);
 
@@ -620,6 +674,29 @@ export default function SidePanel() {
     }
   };
 
+  const handleExportWav = async () => {
+    if (!recordingUrl || isExportingWav) return;
+    setIsExportingWav(true);
+    try {
+      const wavBlob = await webmToWavBlob(recordingUrl);
+      const downloadUrl = URL.createObjectURL(wavBlob);
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `recording-${ts}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(downloadUrl);
+      toast.success("WAV exported", { duration: 1800 });
+    } catch (err) {
+      console.error("export wav failed", err);
+      toast.error("Export failed, please try again", { duration: 2400 });
+    } finally {
+      setIsExportingWav(false);
+    }
+  };
+
   const onHandlePointerDown = useCallback(
     (ev: ReactPointerEvent<HTMLDivElement>) => {
       const host = splitRef.current;
@@ -858,6 +935,15 @@ export default function SidePanel() {
               >
                 <Play className="w-4 h-4" />
                 <span>My Recording</span>
+              </button>
+              <button
+                disabled={!recordingUrl || isExportingWav}
+                onClick={handleExportWav}
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-md border text-sm transition-colors ${
+                  recordingUrl && !isExportingWav ? "hover:bg-muted" : "opacity-60 cursor-not-allowed"
+                }`}
+              >
+                <span>{isExportingWav ? "Exporting..." : "Export WAV"}</span>
               </button>
               <audio ref={audioRef} src={recordingUrl ?? undefined} className="hidden" />
             </div>
