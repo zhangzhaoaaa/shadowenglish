@@ -431,10 +431,10 @@ export default function SidePanel() {
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <header className="px-6 pt-6 pb-4 flex-shrink-0">
-        <h1 className="text-xl font-bold text-foreground">Speak Practice Loop</h1>
+        <h1 className="text-xl font-bold text-foreground">Shadow Language Practice</h1>
         <div className="flex flex-row gap-2 justify-between items-center mt-2">
-          <div className="text-sm text-muted-foreground">1. Listen to the text</div>
-          <div className="text-sm text-muted-foreground">2. Repeat out loud</div>
+          <div className="text-sm text-muted-foreground">1. Listen</div>
+          <div className="text-sm text-muted-foreground">2. Repeat</div>
           <div className="text-sm text-muted-foreground">3. Feedback</div>
         </div>
       </header>
@@ -444,7 +444,7 @@ export default function SidePanel() {
         <div className="flex-none basis-[45%] min-h-0 overflow-hidden rounded-lg shadow border border-border bg-card flex flex-col p-6">
           <article
             ref={listRef}
-            className="prose prose-lg dark:prose-invert text-foreground space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-w-none scroll-smooth snap-y snap-proximity"
+            className="prose prose-lg dark:prose-invert text-foreground space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden max-w-none scroll-smooth snap-y snap-proximity text-lg"
           >
             {groupedSegments.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground">No segments available</div>
@@ -502,7 +502,7 @@ export default function SidePanel() {
         </div>
 
         {/* Lower half: controls and practice */}
-        <div className="flex-none basis-[55%] min-h-0 overflow-hidden overflow-y-auto rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-lg shadow border border-border bg-card flex flex-col p-6 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
               <input
@@ -579,7 +579,7 @@ export default function SidePanel() {
             </div>
           </div>
 
-          <div className="rounded-lg border bg-card p-4 min-h-[180px] flex flex-col gap-2 overflow-visible">
+          <div className="w-full flex-shrink-0 rounded-lg border bg-card p-4 min-h-[180px] flex flex-col gap-3 overflow-hidden">
             <div>
               <div className="flex items-center justify-between gap-2">
                 <div>
