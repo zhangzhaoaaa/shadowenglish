@@ -18,6 +18,7 @@ let loopCheckTimer: number | null = null;
 const STOP_SNAP = 0.02; // keep cursor inside the target segment
 
 const findVideo = () => document.querySelector("video.html5-main-video") as HTMLVideoElement || document.querySelector("video") as HTMLVideoElement;
+const getCurrentVideoId = () => new URLSearchParams(window.location.search).get("v") ?? null;
 
 const injectCaptionsScript = () => {
   const s = document.createElement("script");
@@ -89,6 +90,12 @@ const handleProgress = () => {
   chrome.runtime.sendMessage(payload).catch(() => {});
 };
 
+
+const requestCaptions = () => {
+  window.postMessage({ type: "SPL_REQUEST_CAPTIONS" }, "*");
+  setTimeout(() => window.postMessage({ type: "SPL_REQUEST_CAPTIONS" }, "*"), 800);
+  setTimeout(() => window.postMessage({ type: "SPL_REQUEST_CAPTIONS" }, "*"), 1800);
+};
 const initVideo = () => {
   video = findVideo();
   if (video) {
@@ -103,11 +110,19 @@ const initVideo = () => {
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;
   if (event.data && event.data.type === "SPL_CAPTIONS_FOUND") {
-    console.log('[SPL] cs: captions received', event.data.payload?.segments?.length ?? 0, event.data.payload?.language);
-    captions = event.data.payload.segments;
-    currentLanguage = event.data.payload.language;
+    const payload = event.data.payload || {};
+    const incomingVideoId = payload.videoId ?? null;
+    const currentVideoId = getCurrentVideoId();
+    if (incomingVideoId && currentVideoId && incomingVideoId !== currentVideoId) {
+      console.log('[SPL] cs: ignore captions for old video', incomingVideoId, 'current', currentVideoId);
+      return;
+    }
+    console.log('[SPL] cs: captions received', payload?.segments?.length ?? 0, payload?.language, 'vid', incomingVideoId);
+    captions = payload.segments;
+    currentLanguage = payload.language;
     const msg: any = { type: "spl-segments-updated", segments: captions };
     if (currentTabId != null) msg.tabId = currentTabId;
+    msg.videoId = incomingVideoId ?? currentVideoId;
     console.log('[SPL] cs: forwarding segments to sidepanel', captions.length);
     chrome.runtime.sendMessage(msg);
   }
@@ -161,7 +176,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       break;
     case "spl-get-initial-state":
-      window.postMessage({ type: "SPL_REQUEST_CAPTIONS" }, "*");
+      requestCaptions();
       sendResponse({ currentTime: video ? video.currentTime : 0, isReady: !!video, speed: video ? video.playbackRate : 1, segments: captions, videoId: new URLSearchParams(window.location.search).get("v"), currentLanguage });
       break;
   }
@@ -175,6 +190,10 @@ new MutationObserver(() => {
   const url = location.href;
   if (url !== lastUrl) {
     lastUrl = url;
+    captions = [];
+    currentLanguage = "en";
     initVideo();
+    requestCaptions();
+    chrome.runtime.sendMessage({ type: "spl-segments-updated", segments: [], videoId: new URLSearchParams(window.location.search).get("v"), tabId: currentTabId ?? undefined });
   }
 }).observe(document, { subtree: true, childList: true });
