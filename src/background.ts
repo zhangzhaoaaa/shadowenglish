@@ -2,14 +2,82 @@ const SIDE_PANEL_PATH = "sidepanel.html";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  chrome.sidePanel.setOptions({ enabled: false }); // Disable side panel globally by default
 });
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  const url = tab?.url;
-  if (!url) return;
-  const origin = new URL(url).origin;
-  const allowed = origin === "https://www.youtube.com" || origin.startsWith("chrome-extension://");
-  await chrome.sidePanel.setOptions({ tabId, path: SIDE_PANEL_PATH, enabled: allowed });
+const isAllowedUrl = (url: string) => {
+  if (!url) return false;
+  if (url.startsWith("file://")) return false; // Explicitly disallow file URLs
+  try {
+    const u = new URL(url);
+    const origin = u.origin;
+    return origin.endsWith("youtube.com") || origin === "https://www.youtube.com" || origin === "https://youtu.be";
+  } catch {
+    return false;
+  }
+};
+
+const syncSidePanelForTab = async (tabId: number, url?: string) => {
+  let targetUrl = url;
+  if (!targetUrl) {
+    try {
+      const t = await chrome.tabs.get(tabId);
+      targetUrl = t?.url;
+    } catch (e) {
+      // console.debug('Failed to get tab info:', e);
+      targetUrl = undefined;
+    }
+  }
+
+  const allowed = !!targetUrl && isAllowedUrl(targetUrl);
+  console.log(`[SidePanel] Tab ${tabId} (${targetUrl}) allowed: ${allowed}`);
+  
+  try {
+    if (allowed) {
+      await chrome.sidePanel.setOptions({ tabId, path: SIDE_PANEL_PATH, enabled: true });
+      try {
+        // Only attempt to open if we think it might work (e.g. user interaction context), 
+        // but we can't easily know that here. 
+        // We rely on the user clicking the action button mostly, 
+        // but this helps if the panel was already open or in some contexts.
+        await chrome.sidePanel.open({ tabId });
+      } catch (e) {
+        // Expected error when not triggered by user gesture
+        // console.debug('Failed to open side panel:', e);
+      }
+    } else {
+      await chrome.sidePanel.setOptions({ tabId, enabled: false });
+    }
+  } catch (e) {
+    console.error(`[SidePanel] Failed to set options for tab ${tabId}:`, e);
+  }
+};
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "loading" || changeInfo.status === "complete" || changeInfo.url) {
+    syncSidePanelForTab(tabId, changeInfo.url ?? tab?.url);
+  }
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  syncSidePanelForTab(tabId);
+  // Retry once to handle potential race conditions or loading states
+  setTimeout(() => syncSidePanelForTab(tabId), 200);
+});
+
+chrome.tabs.onReplaced.addListener((addedTabId) => {
+  syncSidePanelForTab(addedTabId);
+});
+
+chrome.tabs.onCreated.addListener((tab) => {
+  if (typeof tab.id === "number") syncSidePanelForTab(tab.id, tab.url);
+});
+
+chrome.windows.onFocusChanged.addListener(() => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const t = tabs[0];
+    if (t && typeof t.id === "number") syncSidePanelForTab(t.id, t.url);
+  });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
