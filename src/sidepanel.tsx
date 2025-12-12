@@ -4,7 +4,8 @@ declare const chrome: any;
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import "./style.css";
-import { Play, Settings } from "lucide-react";
+import { Copy, Play, Settings } from "lucide-react";
+import { ToastViewport, toast } from "./components/toast";
 import { useAppStore } from "./store/useAppStore";
 import type { EvaluatedToken, Segment } from "./types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
@@ -502,11 +503,46 @@ export default function SidePanel() {
     } catch (err: any) {
       console.error("getUserMedia failed", err);
       stopRecordingInternal();
-      // 简易权限提示
+      // Simple permission prompt
       const msg = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError"
-        ? "麦克风权限被拒绝，请在浏览器地址栏右侧开启麦克风权限后重试"
-        : "无法访问麦克风，请检查权限或设备后重试";
+        ? "The microphone permission has been denied. Please enable the microphone permission on the right side of the browser address bar and try again."
+        : "Unable to access the microphone. Please check your permissions or device and try again.";
       alert(msg);
+    }
+  };
+
+  const handleCopyPractice = async () => {
+    if (!hasPractice) return;
+    const text = practiceWords.join(" ").trim();
+    if (!text) return;
+    try {
+      if (document.hasFocus()) {
+        await navigator.clipboard.writeText(text);
+        toast.success("Copy successful", { duration: 1800});
+        return;
+      }
+      throw new Error("document-not-focused");
+    } catch (err) {
+      // Fallback: textarea + execCommand in case clipboard API requires focus
+      try {
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.setAttribute("readonly", "");
+        el.style.position = "absolute";
+        el.style.left = "-9999px";
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(el);
+        if (ok) {
+          toast.success("Copy successful", { duration: 1800 });
+          return;
+        }
+      } catch (fallbackErr) {
+        console.error("copy practice fallback failed", fallbackErr);
+      }
+      console.error("copy practice failed", err);
+      toast.error("Copy failed, please click the sidebar first or copy manually", { duration: 2400 });
     }
   };
 
@@ -532,6 +568,7 @@ export default function SidePanel() {
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
+      <ToastViewport />
       <header className="px-6 pt-6 pb-4 flex-shrink-0">
         <h1 className="text-xl font-bold text-foreground">Shadow Language Practice</h1>
         <div className="flex flex-row gap-2 justify-between items-center mt-2">
@@ -741,8 +778,21 @@ export default function SidePanel() {
               </button>
               <audio ref={audioRef} src={recordingUrl ?? undefined} className="hidden" />
             </div>
-            <div className="text-xs text-muted-foreground min-h-[20px]">
-              {isRecording ? `录音中... ${interimTranscript}` : recordingUrl ? "可回放最近录音" : "暂无录音"}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground min-h-[20px]">
+              <button
+                type="button"
+                onClick={handleCopyPractice}
+                disabled={!hasPractice}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs transition-colors ${
+                  hasPractice ? "hover:bg-muted" : "opacity-60 cursor-not-allowed"
+                }`}
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy</span>
+              </button>
+              <span>
+                {isRecording ? `Recording... ${interimTranscript}` : recordingUrl ? "Playback recent recording" : "No recording available"}
+              </span>
             </div>
           </div>
 
@@ -751,20 +801,20 @@ export default function SidePanel() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-foreground leading-relaxed">
-                    {practiceWords.length ? practiceWords.join(" ") : "Select text above to start practicing"}
+                    {practiceWords.length ? practiceWords.join(" ") : <span className="text-muted-foreground text-xs">Select text above to start practicing</span>}
                   </p>
                 </div>
               </div>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">录音识别</p>
-              <p className="text-sm text-muted-foreground leading-relaxed min-h-[20px]">
-                {finalTranscript || interimTranscript || "Speak 开始录音与识别"}
+              {/* <p className="text-sm text-muted-foreground">Speech recognition</p> */}
+              <p className="text-xs text-muted-foreground leading-relaxed min-h-[20px]">
+                {finalTranscript || interimTranscript || "Speak to start recording and recognition"}
               </p>
             </div>
             <div className="flex flex-wrap gap-1">
               {evaluatedTokens.length === 0 ? (
-                <span className="text-muted-foreground text-sm">Speak to see feedback</span>
+                <span className="text-muted-foreground text-xs">Speak to see feedback</span>
               ) : (
                 evaluatedTokens.map((tok, idx) => {
                   const color =
