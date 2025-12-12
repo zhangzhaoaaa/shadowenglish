@@ -46,6 +46,15 @@ const TARGET_LANGUAGES = [
   { code: "vi", label: "Vietnamese" },
 ];
 
+const THEMES = [
+  { value: "default", label: "Default" },
+  { value: "vibrant-forest", label: "Vibrant Forest" },
+  { value: "warm-orange", label: "Warm Sunshine Orange" },
+  { value: "serene-violet", label: "Serene Violet " },
+  { value: "cool-mint", label: "Cool Mint Green" },
+  { value: "dark-night", label: "Dark Night Sky" }
+];
+
 // Group segments by punctuation or by duration fallback
 const TERMINATORS = [".", "!", "?", ";"];
 const TERMINATOR_REGEX = new RegExp(`[${TERMINATORS.join("")}]`);
@@ -163,6 +172,7 @@ export default function SidePanel() {
     autoScroll,
     playbackRate,
     selectedGroupIndex,
+    theme,
     language,
     targetLanguage,
     isRecording,
@@ -179,6 +189,7 @@ export default function SidePanel() {
     setAutoScroll,
     setPlaybackRate,
     setSelectedGroupIndex,
+    setTheme,
     setLanguage,
     setTargetLanguage,
     setIsPlaying,
@@ -219,6 +230,37 @@ export default function SidePanel() {
   }, [handlePointerMove]);
 
   const groupedSegments = useMemo(() => groupSegments(rawSegments, 10), [rawSegments]);
+
+  useEffect(() => {
+    const themeClassMap: Record<string, string> = {
+      default: "theme-default",
+      "vibrant-forest": "theme-forest",
+      "warm-orange": "theme-warm-orange",
+      "serene-violet": "theme-serene-violet",
+      "cool-mint": "theme-cool-mint",
+      "dark-night": "theme-dark-night"
+    };
+    const className = themeClassMap[theme] ?? "theme-default";
+    const body = document.body;
+    body.classList.remove("theme-forest", "theme-default", "theme-warm-orange", "theme-serene-violet", "theme-cool-mint", "theme-dark-night");
+    body.classList.add(className);
+    return () => body.classList.remove(className);
+  }, [theme]);
+
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+    chrome.storage.local.get(["spl-theme"], (res: any) => {
+      const saved = res?.["spl-theme"];
+      const allowed = new Set(["default", "vibrant-forest", "warm-orange", "serene-violet", "cool-mint", "dark-night"]);
+      if (allowed.has(saved)) setTheme(saved as typeof theme);
+    });
+  }, [setTheme]);
+
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+    // Persist theme selection for next sessions
+    chrome.storage.local.set({ "spl-theme": theme });
+  }, [theme]);
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res: any) => {
@@ -741,11 +783,20 @@ export default function SidePanel() {
                         </SelectContent>
                       </Select>
                     </div>
-                    {/* Placeholder for future settings */}
-                    <div className="pt-2 border-t border-border">
-                      <p className="text-[10px] text-muted-foreground text-center">
-                        More settings coming soon...
-                      </p>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Theme</label>
+                      <Select value={theme} onValueChange={setTheme}>
+                        <SelectTrigger className="w-full h-8 text-xs">
+                          <SelectValue placeholder="Select theme" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px]">
+                          {THEMES.map((item) => (
+                            <SelectItem key={item.value} value={item.value} className="text-xs">
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </PopoverContent>
