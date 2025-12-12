@@ -12,6 +12,7 @@ type AppState = {
   language: string | null
   targetLanguage: string
   isRecording: boolean
+  isPlaying: boolean
   interimTranscript: string
   finalTranscript: string
   recordingUrl: string | null
@@ -26,6 +27,7 @@ type AppState = {
   setSelectedGroupIndex: (idx: number | null) => void
   setLanguage: (lang: string | null) => void
   setTargetLanguage: (lang: string) => void
+  setIsPlaying: (playing: boolean) => void
   setRecordingState: (
     payload:
       | Partial<Pick<AppState, "isRecording" | "interimTranscript" | "finalTranscript" | "recordingUrl">>
@@ -47,6 +49,7 @@ export const useAppStore = create<AppState>((set) => ({
   language: null,
   targetLanguage: "zh-CN",
   isRecording: false,
+  isPlaying: false,
   interimTranscript: "",
   finalTranscript: "",
   recordingUrl: null,
@@ -61,11 +64,12 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedGroupIndex: (selectedGroupIndex) => set({ selectedGroupIndex }),
   setLanguage: (language) => set({ language }),
   setTargetLanguage: (targetLanguage) => set({ targetLanguage }),
+  setIsPlaying: (isPlaying) => set({ isPlaying }),
   setRecordingState: (payload) =>
-    set((state) => ({
-      ...state,
-      ...(typeof payload === "function" ? payload(state) : payload)
-    })),
+    set((state) => {
+      const partial = typeof payload === "function" ? payload(state) : payload
+      return { ...partial }
+    }),
   resetRecording: () =>
     set((state) => ({
       ...state,

@@ -161,6 +161,7 @@ export default function SidePanel() {
     language,
     targetLanguage,
     isRecording,
+    isPlaying,
     interimTranscript,
     finalTranscript,
     recordingUrl,
@@ -175,6 +176,7 @@ export default function SidePanel() {
     setSelectedGroupIndex,
     setLanguage,
     setTargetLanguage,
+    setIsPlaying,
     setRecordingState,
     resetRecording,
     setEvaluatedTokens,
@@ -213,6 +215,7 @@ export default function SidePanel() {
         if (typeof incomingState.currentTime === "number") setCurrentTime(incomingState.currentTime);
         if (typeof incomingState.isReady === "boolean") setIsReady(incomingState.isReady);
         if (typeof incomingState.speed === "number") setPlaybackRate(incomingState.speed);
+        if (typeof incomingState.isPlaying === "boolean") setIsPlaying(incomingState.isPlaying);
         const incomingLang =
           typeof v.currentLanguage === "string"
             ? v.currentLanguage
@@ -261,8 +264,8 @@ export default function SidePanel() {
     return null;
   }, [groupedSegments, currentTime]);
 
-  const practiceGroupIndex = selectedGroupIndex ?? activeGroupIndex ?? 0;
-  const practiceGroup = groupedSegments[practiceGroupIndex] ?? [];
+  const practiceGroupIndex = selectedGroupIndex;
+  const practiceGroup = (practiceGroupIndex !== null) ? (groupedSegments[practiceGroupIndex] ?? []) : [];
   const practiceText = joinGroupText(practiceGroup);
   const practiceWords = selectedPracticeWords.length > 0 ? selectedPracticeWords : tokenize(practiceText);
   const practiceTextForEval = practiceWords.join(" ");
@@ -520,6 +523,9 @@ export default function SidePanel() {
                           e.stopPropagation();
                           playGroup(group);
                           setSelectedGroupIndex(groupIndex);
+                          setSelectedPracticeWords([]);
+                          resetRecording();
+                          setEvaluatedTokens([]);
                         }}
                         className="flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-1"
                         aria-label="Play line"

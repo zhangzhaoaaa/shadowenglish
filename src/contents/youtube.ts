@@ -82,7 +82,7 @@ const handleProgress = () => {
   const currentSegmentIndex = captions.findIndex(c => currentTime >= c.startSeconds && currentTime < c.endSeconds);
   const payload: any = {
     type: "spl-state-updated",
-    state: { currentTime, isReady: true, speed: currentSpeed, currentSegmentIndex, videoId: new URLSearchParams(window.location.search).get("v") },
+    state: { currentTime, isReady: true, speed: currentSpeed, currentSegmentIndex, videoId: new URLSearchParams(window.location.search).get("v"), isPlaying: !video.paused },
     currentLanguage
   };
   if (currentTabId != null) payload.tabId = currentTabId;
@@ -93,6 +93,8 @@ const initVideo = () => {
   video = findVideo();
   if (video) {
     video.ontimeupdate = handleProgress;
+    video.onplay = handleProgress;
+    video.onpause = handleProgress;
   } else {
     setTimeout(initVideo, 1000);
   }
