@@ -181,21 +181,27 @@ export default function SidePanel() {
   }, [tabId]);
 
   const playSegment = (seg: Segment) => {
-    if (tabId === null) return;
-    chrome.tabs.sendMessage(tabId, { type: "spl-play", fromTime: seg.startSeconds, time: seg.startSeconds, tabId });
+    const start = seg.startSeconds;
+    const end = seg.endSeconds;
+    const payload = { type: "spl-play-segment", start, end };
+    if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+    else chrome.runtime.sendMessage(payload);
   };
 
   const playGroup = (group: Segment[]) => {
-    if (tabId === null || group.length === 0) return;
+    if (group.length === 0) return;
     const start = group[0].startSeconds;
     const end = group[group.length - 1].endSeconds;
-    chrome.tabs.sendMessage(tabId, { type: "spl-play-period", start, end, loop: false, tabId });
+    const payload = { type: "spl-play-segment", start, end };
+    if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+    else chrome.runtime.sendMessage(payload);
   };
 
   const setSpeed = (speed: number) => {
     setPlaybackRate(speed);
-    if (tabId === null) return;
-    chrome.tabs.sendMessage(tabId, { type: "spl-set-speed", speed, tabId });
+    const payload = { type: "spl-set-speed", speed };
+    if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+    else chrome.runtime.sendMessage(payload);
   };
 
   const isSegmentActive = (seg: Segment) => currentTime >= seg.startSeconds && currentTime < seg.endSeconds;

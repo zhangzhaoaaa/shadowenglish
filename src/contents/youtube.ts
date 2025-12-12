@@ -14,6 +14,8 @@ let loopActive = false;
 let periodStart = 0;
 let periodEnd = 0;
 let playOnceActive = false;
+let loopCheckTimer: number | null = null;
+const STOP_SNAP = 0.02; // keep cursor inside the target segment
 
 const findVideo = () => document.querySelector("video.html5-main-video") as HTMLVideoElement || document.querySelector("video") as HTMLVideoElement;
 
@@ -30,30 +32,67 @@ try {
   });
 } catch {}
 
+const stopLoopTimer = () => {
+  if (loopCheckTimer !== null) {
+    clearInterval(loopCheckTimer);
+    loopCheckTimer = null;
+  }
+};
+
+const ensureLoopTimer = () => {
+  if (loopCheckTimer !== null) return;
+  loopCheckTimer = window.setInterval(() => {
+    if (!video) return;
+    const now = video.currentTime;
+    const endGuard = playOnceActive ? Math.max(periodEnd - 0.08, periodStart) : periodEnd;
+    if (loopActive && now >= endGuard) {
+      if (playOnceActive) {
+        const snapTime = Math.max(periodStart, periodEnd - STOP_SNAP);
+        video.pause();
+        video.currentTime = snapTime;
+        loopActive = false;
+        playOnceActive = false;
+        stopLoopTimer();
+      } else {
+        video.currentTime = periodStart;
+      }
+    }
+  }, 30);
+};
+
+const handleProgress = () => {
+  if (!video) return;
+  const currentSpeed = video.playbackRate;
+  let currentTime = video.currentTime;
+  // Pause a bit before the declared end to avoid leaking the next word
+  const endGuard = playOnceActive ? Math.max(periodEnd - 0.08, periodStart) : periodEnd;
+  if (loopActive && currentTime >= endGuard) {
+    if (playOnceActive) {
+      const snapTime = Math.max(periodStart, periodEnd - STOP_SNAP);
+      video.pause();
+      video.currentTime = snapTime;
+      currentTime = snapTime;
+      loopActive = false;
+      playOnceActive = false;
+      stopLoopTimer();
+    } else {
+      video.currentTime = periodStart;
+    }
+  }
+  const currentSegmentIndex = captions.findIndex(c => currentTime >= c.startSeconds && currentTime < c.endSeconds);
+  const payload: any = {
+    type: "spl-state-updated",
+    state: { currentTime, isReady: true, speed: currentSpeed, currentSegmentIndex, videoId: new URLSearchParams(window.location.search).get("v") },
+    currentLanguage
+  };
+  if (currentTabId != null) payload.tabId = currentTabId;
+  chrome.runtime.sendMessage(payload).catch(() => {});
+};
+
 const initVideo = () => {
   video = findVideo();
   if (video) {
-    video.ontimeupdate = () => {
-      const currentSpeed = video!.playbackRate;
-      const currentTime = video!.currentTime;
-      if (loopActive && currentTime >= periodEnd) {
-        if (playOnceActive) {
-          video!.pause();
-          loopActive = false;
-          playOnceActive = false;
-        } else {
-          video!.currentTime = periodStart;
-        }
-      }
-      const currentSegmentIndex = captions.findIndex(c => currentTime >= c.startSeconds && currentTime < c.endSeconds);
-      const payload: any = {
-        type: "spl-state-updated",
-        state: { currentTime, isReady: true, speed: currentSpeed, currentSegmentIndex, videoId: new URLSearchParams(window.location.search).get("v") },
-        currentLanguage
-      };
-      if (currentTabId != null) payload.tabId = currentTabId;
-      chrome.runtime.sendMessage(payload).catch(() => {});
-    };
+    video.ontimeupdate = handleProgress;
   } else {
     setTimeout(initVideo, 1000);
   }
@@ -81,7 +120,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       video?.play();
       break;
     case "spl-pause":
-      video?.pause();
+      if (video) {
+        video.pause();
+      }
+      loopActive = false;
+      playOnceActive = false;
+      stopLoopTimer();
       break;
     case "spl-set-speed":
       if (video) video.playbackRate = msg.speed;
@@ -97,6 +141,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         playOnceActive = !msg.loop;
         video.currentTime = periodStart;
         video.play();
+        ensureLoopTimer();
       }
       break;
     case "spl-play-segment":
@@ -107,6 +152,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         playOnceActive = true;
         video.currentTime = periodStart;
         video.play();
+        ensureLoopTimer();
       }
       break;
     case "spl-get-initial-state":
