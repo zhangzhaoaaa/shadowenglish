@@ -58,6 +58,14 @@ function normalizeToken(token: string): string {
   return token.replace(/[^\w']/g, "").toLowerCase();
 }
 
+function arraysShallowEqual<T>(a: T[], b: T[]) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 function tokenSimilarity(a: string, b: string): number {
   if (!a || !b) return 0;
   if (a === b) return 1;
@@ -202,6 +210,7 @@ export default function SidePanel() {
     const payload = { type: "spl-set-speed", speed };
     if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
     else chrome.runtime.sendMessage(payload);
+    if (hasPractice) playPracticeSelection();
   };
 
   const isSegmentActive = (seg: Segment) => currentTime >= seg.startSeconds && currentTime < seg.endSeconds;
@@ -219,6 +228,35 @@ export default function SidePanel() {
   const practiceText = joinGroupText(practiceGroup);
   const practiceWords = selectedPracticeWords.length > 0 ? selectedPracticeWords : tokenize(practiceText);
   const practiceTextForEval = practiceWords.join(" ");
+  const hasPractice = practiceWords.length > 0;
+
+  const computePracticeRange = () => {
+    if (practiceGroup.length === 0) return null;
+    const normWords = new Set(practiceWords.map((w) => normalizeToken(w)).filter(Boolean));
+    let start: number | null = null;
+    let end: number | null = null;
+    for (const seg of practiceGroup) {
+      const segTokens = tokenize(seg.text).map(normalizeToken);
+      const hits = segTokens.some((t) => normWords.has(t));
+      if (hits || normWords.size === 0) {
+        start = start === null ? seg.startSeconds : Math.min(start, seg.startSeconds);
+        end = end === null ? seg.endSeconds : Math.max(end, seg.endSeconds);
+      }
+    }
+    if (start === null || end === null) {
+      start = practiceGroup[0].startSeconds;
+      end = practiceGroup[practiceGroup.length - 1].endSeconds;
+    }
+    return { start, end };
+  };
+
+  const playPracticeSelection = () => {
+    const range = computePracticeRange();
+    if (!range) return;
+    const payload = { type: "spl-play-segment", start: range.start, end: range.end };
+    if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+    else chrome.runtime.sendMessage(payload);
+  };
 
   useEffect(() => {
     const listEl = listRef.current;
@@ -453,7 +491,12 @@ export default function SidePanel() {
             </label>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="px-2 py-1 rounded-md border border-border">{language ?? "--"}</span>
-              <button className="px-3 py-1 rounded-md border border-border hover:bg-muted transition-colors">Translate</button>
+              <button
+                className="px-3 py-1 rounded-md border border-border hover:bg-muted transition-colors"
+                disabled={!hasPractice}
+              >
+                Translate
+              </button>
             </div>
           </div>
 
@@ -464,6 +507,7 @@ export default function SidePanel() {
                 className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 ${
                   playbackRate === 1 ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
                 }`}
+                disabled={!hasPractice}
               >
                 <span>1x</span>
               </button>
@@ -472,6 +516,7 @@ export default function SidePanel() {
                 className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 ${
                   playbackRate === 0.5 ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
                 }`}
+                disabled={!hasPractice}
               >
                 <span>0.5x</span>
               </button>
@@ -481,6 +526,7 @@ export default function SidePanel() {
               className={`flex-1 max-w-xs h-10 rounded-md text-sm font-medium flex items-center justify-center transition-colors ${
                 isRecording ? "bg-red-600 text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
               }`}
+              disabled={!hasPractice}
             >
               {isRecording ? "Stop" : "Speak"}
             </button>
@@ -511,8 +557,14 @@ export default function SidePanel() {
 
           <div className="rounded-lg border bg-card p-4 min-h-[180px] flex flex-col gap-2 overflow-visible">
             <div>
-              <p className="text-xs text-muted-foreground">当前练习句</p>
-              <p className="text-sm text-foreground leading-relaxed">{practiceWords.length ? practiceWords.join(" ") : "Select text above to start practicing"}</p>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">当前练习句</p>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {practiceWords.length ? practiceWords.join(" ") : "Select text above to start practicing"}
+                  </p>
+                </div>
+              </div>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">录音识别</p>
