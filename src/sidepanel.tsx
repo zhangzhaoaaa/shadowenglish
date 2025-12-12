@@ -240,10 +240,17 @@ export default function SidePanel() {
   const playGroup = (group: Segment[]) => {
     if (group.length === 0) return;
     const start = group[0].startSeconds;
-    const end = group[group.length - 1].endSeconds;
-    const payload = { type: "spl-play-segment", start, end };
-    if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
-    else chrome.runtime.sendMessage(payload);
+    
+    if (autoScroll) {
+      const payload = { type: "spl-play", fromTime: start };
+      if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+      else chrome.runtime.sendMessage(payload);
+    } else {
+      const end = group[group.length - 1].endSeconds;
+      const payload = { type: "spl-play-segment", start, end };
+      if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+      else chrome.runtime.sendMessage(payload);
+    }
   };
 
   const setSpeed = (speed: number) => {
@@ -684,12 +691,11 @@ export default function SidePanel() {
             </div>
           </div>
 
-          <div className="w-full flex-shrink-0 rounded-lg border bg-card p-4 min-h-[180px] flex flex-col gap-3 overflow-hidden">
+          <div className="w-full flex-shrink-0 rounded-lg border bg-card p-4 min-h-[180px] flex flex-col gap-3 overflow-hidden text-lg">
             <div>
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs text-muted-foreground">当前练习句</p>
-                  <p className="text-sm text-foreground leading-relaxed">
+                  <p className="text-foreground leading-relaxed">
                     {practiceWords.length ? practiceWords.join(" ") : "Select text above to start practicing"}
                   </p>
                 </div>

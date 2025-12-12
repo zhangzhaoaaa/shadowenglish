@@ -119,6 +119,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
     case "spl-play":
       if (msg.fromTime !== undefined && video) video.currentTime = msg.fromTime;
+      loopActive = false;
+      playOnceActive = false;
+      stopLoopTimer();
       video?.play();
       break;
     case "spl-pause":
