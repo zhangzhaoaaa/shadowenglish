@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import "./style.css";
 import { Copy, Play, Settings } from "lucide-react";
+import confetti from "canvas-confetti";
 import { ToastViewport, toast } from "./components/toast";
 import { useAppStore } from "./store/useAppStore";
 import type { EvaluatedToken, Segment } from "./types";
@@ -196,6 +197,7 @@ export default function SidePanel() {
   const splitRef = useRef<HTMLDivElement | null>(null);
   const [topRatio, setTopRatio] = useState(0.55);
   const isDraggingRef = useRef(false);
+  const lastConfettiKeyRef = useRef<string | null>(null);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -409,6 +411,36 @@ export default function SidePanel() {
     }
     setEvaluatedTokens(evaluateSentence(practiceTextForEval, finalTranscript));
   }, [practiceTextForEval, finalTranscript, setEvaluatedTokens]);
+
+  useEffect(() => {
+    const allCorrect = evaluatedTokens.length > 0 && evaluatedTokens.every((t) => t.status === "correct");
+    const key = `${practiceTextForEval}__${finalTranscript}`;
+
+    if (allCorrect) {
+      if (lastConfettiKeyRef.current === key) return;
+      lastConfettiKeyRef.current = key;
+
+      const count = 200;
+      const defaults = { origin: { y: 0.7 } };
+      const fire = (particleRatio: number, opts: Record<string, number>) => {
+        confetti({ ...defaults, ...opts, particleCount: Math.floor(count * particleRatio) });
+      };
+
+      const launch = () => {
+        fire(0.25, { spread: 26, startVelocity: 55 });
+        fire(0.2, { spread: 60 });
+        fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+        fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+        fire(0.1, { spread: 120, startVelocity: 45 });
+      };
+
+      launch();
+      window.setTimeout(launch, 350);
+      window.setTimeout(launch, 700);
+    } else {
+      lastConfettiKeyRef.current = null;
+    }
+  }, [evaluatedTokens, finalTranscript, practiceTextForEval]);
 
   const handleTranslate = () => {
     if (!hasPractice) return;
