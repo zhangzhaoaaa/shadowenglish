@@ -32,8 +32,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "manifest": {
-    "name": "Shadowing with YouTube Loop",
-    "description": "Practice speaking a language by looping segments of YouTube videos with transcripts in a side panel.",
+    "name": "Shadowing Practice Loop – English, Spanish, French, Russian Speaking Practice",
+    "description": "Practice English, Spanish, French, Russian speaking on YouTube™. Repeat phrases, get instant pronunciation feedback, and improve your fluency with our shadowing technique.",
     "permissions": [
       "sidePanel",
       "activeTab",
