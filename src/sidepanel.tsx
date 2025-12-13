@@ -900,7 +900,7 @@ export default function SidePanel() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSpeed(1)}
-                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 ${
+                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:opacity-60 disabled:cursor-not-allowed ${
                   playbackRate === 1 ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
                 }`}
                 disabled={!hasPractice}
@@ -909,7 +909,7 @@ export default function SidePanel() {
               </button>
               <button
                 onClick={() => setSpeed(0.5)}
-                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 ${
+                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:opacity-60 disabled:cursor-not-allowed ${
                   playbackRate === 0.5 ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
                 }`}
                 disabled={!hasPractice}
@@ -917,15 +917,15 @@ export default function SidePanel() {
                 <span>0.5x</span>
               </button>
             </div>
-            <button
-              onClick={handleSpeakClick}
-              className={`flex-1 max-w-xs h-10 rounded-md text-sm font-medium flex items-center justify-center transition-colors ${
-                isRecording ? "bg-red-600 text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
-              }`}
-              disabled={!hasPractice}
-            >
-              {isRecording ? "Stop" : "Speak"}
-            </button>
+              <button
+                onClick={handleSpeakClick}
+                className={`flex-1 max-w-xs h-10 rounded-md text-sm font-medium flex items-center justify-center transition-colors disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:opacity-60 disabled:cursor-not-allowed ${
+                  isRecording ? "bg-red-600 text-white" : "bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+                disabled={!hasPractice}
+              >
+                {isRecording ? "Stop" : "Speak"}
+              </button>
           </div>
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
