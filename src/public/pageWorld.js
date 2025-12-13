@@ -1,5 +1,5 @@
 (function () {
-  console.log('[SPL] inj: start (v2 - competitor inspired)');
+  // console.log('[SPL] inj: start (v2 - competitor inspired)');
 
   // --- State ---
   let currentVideoId = null;
@@ -31,7 +31,7 @@
         const pot = m[1];
         const vid = v ? v[1] : getVideoId();
         if (vid) {
-          console.log('[SPL] inj: captured POT for', vid, pot.substring(0, 5) + '...');
+          // console.log('[SPL] inj: captured POT for', vid, pot.substring(0, 5) + '...');
           potCache.set(vid, pot);
         }
       }
@@ -50,7 +50,7 @@
     }
 
     if (btn) {
-      console.log('[SPL] inj: forcing captions via button click');
+      // console.log('[SPL] inj: forcing captions via button click');
       btn.click();
       await new Promise(r => setTimeout(r, 200));
       btn.click();
@@ -60,7 +60,7 @@
   const ensurePot = async (videoId) => {
     if (potCache.has(videoId)) return potCache.get(videoId);
 
-    console.log('[SPL] inj: POT missing for', videoId, 'waiting...');
+    // console.log('[SPL] inj: POT missing for', videoId, 'waiting...');
     const startTime = Date.now();
     const MAX_WAIT = 10000; // 10s timeout
 
@@ -132,7 +132,7 @@
 
   // --- Main Fetch Logic ---
   const processVideo = async (videoId) => {
-    console.log('[SPL] inj: processing video', videoId);
+    // console.log('[SPL] inj: processing video', videoId);
 
     // 1. Get Player Response (wait if needed)
     let playerResponse = null;
@@ -153,13 +153,13 @@
 
     // 2. Check for captions
     if (!playerResponse.captions || !playerResponse.captions.playerCaptionsTracklistRenderer) {
-      console.log('[SPL] inj: no captions in player response');
+      // console.log('[SPL] inj: no captions in player response');
       return;
     }
 
     const tracks = playerResponse.captions.playerCaptionsTracklistRenderer.captionTracks;
     if (!tracks || tracks.length === 0) {
-      console.log('[SPL] inj: no caption tracks found');
+      // console.log('[SPL] inj: no caption tracks found');
       return;
     }
 
@@ -181,14 +181,14 @@
     // 5. Fetch Captions
     try {
       const url = `${track.baseUrl}&fmt=json3${potParam}&c=WEB&lang=${track.languageCode}`;
-      console.log('[SPL] inj: fetching captions', url);
+      // console.log('[SPL] inj: fetching captions', url);
       const resp = await fetch(url, { credentials: 'include' });
       if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
       
       const data = await resp.json();
       if (data && Array.isArray(data.events)) {
         const segments = buildSegmentsFromEvents(data.events);
-        console.log('[SPL] inj: segments built', segments.length);
+        // console.log('[SPL] inj: segments built', segments.length);
         
         window.postMessage({
           type: 'SPL_CAPTIONS_FOUND',
