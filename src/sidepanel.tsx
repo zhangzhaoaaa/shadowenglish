@@ -50,7 +50,7 @@ const THEMES = [
   { value: "default", label: "Default" },
   { value: "vibrant-forest", label: "Vibrant Forest" },
   { value: "warm-orange", label: "Warm Sunshine Orange" },
-  { value: "serene-violet", label: "Serene Violet " },
+  { value: "serene-violet", label: "Serene Violet" },
   { value: "cool-mint", label: "Cool Mint Green" },
   { value: "dark-night", label: "Dark Night Sky" }
 ];
