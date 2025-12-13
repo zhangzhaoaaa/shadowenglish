@@ -302,6 +302,12 @@ export default function SidePanel() {
   }, [theme]);
 
   useEffect(() => {
+    const body = document.body
+    body.classList.add("spl-lock-scroll")
+    return () => body.classList.remove("spl-lock-scroll")
+  }, [])
+
+  useEffect(() => {
     if (typeof chrome === "undefined" || !chrome.storage?.local) return;
     chrome.storage.local.get(["spl-theme"], (res: any) => {
       const saved = res?.["spl-theme"];

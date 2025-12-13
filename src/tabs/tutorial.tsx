@@ -81,7 +81,7 @@ function Tutorial() {
 
       <div className="text-center space-y-6">
         <button 
-          onClick={() => window.open("https://www.youtube.com", "_blank")}
+          onClick={() => window.open("https://www.youtube.com/watch?v=3JiVDYL20G4", "_blank")}
           className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-all transform hover:scale-105 active:scale-95"
         >
           Start Practicing Now
@@ -97,6 +97,25 @@ function Tutorial() {
         <p className="text-slate-500">
           Ready to improve your pronunciation? Head to YouTube and start practicing!
         </p>
+        <p className="text-slate-400">Open a video with captions, then click Speak in the side panel to start.</p>
+      </div>
+
+      <div className="mt-10 w-full max-w-4xl">
+        <div className="rounded-2xl border border-slate-200 shadow-lg overflow-hidden bg-white">
+          <div className="bg-slate-100 px-4 py-2 text-slate-500 text-sm">Preview</div>
+          <div className="p-4 bg-slate-50">
+            <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900" style={{ aspectRatio: "16 / 9" }}>
+              <div className="absolute inset-0 grid grid-cols-12">
+                <div className="col-span-7 bg-slate-800" />
+                <div className="col-span-5 bg-slate-900" />
+              </div>
+              <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+                <div className="h-1 w-2/3 bg-slate-700 rounded" />
+                <div className="h-1 w-1/6 bg-slate-700 rounded" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
