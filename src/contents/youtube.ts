@@ -1,4 +1,5 @@
 import type { PlasmoCSConfig } from "plasmo";
+declare const chrome: any;
 
 export const config: PlasmoCSConfig = {
   matches: ["*://*.youtube.com/*"],
@@ -22,14 +23,14 @@ const getCurrentVideoId = () => new URLSearchParams(window.location.search).get(
 
 const injectCaptionsScript = () => {
   const s = document.createElement("script");
-  s.setAttribute("src", chrome.runtime.getURL("src/public/pageWorld.js"));
+  s.setAttribute("src", chrome.runtime.getURL("src/public/pageWorld.obf.js"));
   s.onload = () => { s.remove(); };
   (document.head || document.documentElement).appendChild(s);
 };
 
 try {
   if (chrome.runtime?.id) {
-    chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res) => {
+    chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res: any) => {
       if (res && typeof res.tabId === "number") currentTabId = res.tabId;
     });
   }
@@ -140,7 +141,7 @@ window.addEventListener("message", (event) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) => {
   if (!video) video = findVideo();
   if (currentTabId == null && sender && sender.tab && typeof sender.tab.id === "number") currentTabId = sender.tab.id;
   switch (msg.type) {
