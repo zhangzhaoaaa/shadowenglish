@@ -2,6 +2,8 @@ import { Mic } from "lucide-react"
 import "../style.css"
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const chrome: any
+import img1 from "../../assets/1.png"
+import img2 from "../../assets/2.png"
 
 function requestMic() {
   return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
@@ -103,17 +105,9 @@ function Tutorial() {
       <div className="mt-10 w-full max-w-4xl">
         <div className="rounded-2xl border border-slate-200 shadow-lg overflow-hidden bg-white">
           <div className="bg-slate-100 px-4 py-2 text-slate-500 text-sm">Preview</div>
-          <div className="p-4 bg-slate-50">
-            <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900" style={{ aspectRatio: "16 / 9" }}>
-              <div className="absolute inset-0 grid grid-cols-12">
-                <div className="col-span-7 bg-slate-800" />
-                <div className="col-span-5 bg-slate-900" />
-              </div>
-              <div className="absolute bottom-3 left-3 right-3 flex gap-2">
-                <div className="h-1 w-2/3 bg-slate-700 rounded" />
-                <div className="h-1 w-1/6 bg-slate-700 rounded" />
-              </div>
-            </div>
+          <div className="p-4 bg-slate-50 space-y-4">
+            <img src={img1} alt="Preview 1" loading="lazy" className="w-full rounded-xl border border-slate-200" />
+            <img src={img2} alt="Preview 2" loading="lazy" className="w-full rounded-xl border border-slate-200" />
           </div>
         </div>
       </div>
