@@ -53,7 +53,7 @@
     "web_accessible_resources": [
       {
         "resources": [
-          "src/public/pageWorld.obf.js"
+          "src/public/pageWorld.sec.js"
         ],
         "matches": [
           "*://*.youtube.com/*"

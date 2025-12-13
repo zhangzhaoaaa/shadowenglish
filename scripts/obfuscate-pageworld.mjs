@@ -4,7 +4,7 @@ import process from "node:process"
 import JavaScriptObfuscator from "javascript-obfuscator"
 
 const src = resolve(process.cwd(), "src/public/pageWorld.js")
-const out = resolve(process.cwd(), "src/public/pageWorld.obf.js")
+const out = resolve(process.cwd(), "src/public/pageWorld.sec.js")
 
 const code = await readFile(src, "utf-8")
 

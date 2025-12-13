@@ -23,7 +23,7 @@ const getCurrentVideoId = () => new URLSearchParams(window.location.search).get(
 
 const injectCaptionsScript = () => {
   const s = document.createElement("script");
-  s.setAttribute("src", chrome.runtime.getURL("src/public/pageWorld.obf.js"));
+  s.setAttribute("src", chrome.runtime.getURL("src/public/pageWorld.sec.js"));
   s.onload = () => { s.remove(); };
   (document.head || document.documentElement).appendChild(s);
 };
