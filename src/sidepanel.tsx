@@ -348,6 +348,9 @@ export default function SidePanel() {
               : null;
         if (incomingLang) setLanguage(incomingLang);
       }
+      if (v.type === "spl-mic-granted") {
+        if (!isRecording) handleSpeakClick();
+      }
     };
     chrome.runtime.onMessage.addListener(onMessage);
     return () => chrome.runtime.onMessage.removeListener(onMessage);
@@ -630,12 +633,17 @@ export default function SidePanel() {
       setRecordingState({ isRecording: true });
     } catch (err: any) {
       console.error("getUserMedia failed", err);
+      if (typeof err?.name === "string" && err.name === "NotAllowedError") {
+        try {
+          const url = chrome.runtime?.getURL?.("tabs/tutorial.html?grantMic=1");
+          if (url && chrome.tabs?.create) {
+            chrome.tabs.create({ url });
+            toast.error("Please grant microphone permission in the new tab");
+          }
+        } catch {}
+      }
       stopRecordingInternal();
-      // Simple permission prompt
-      const msg = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError"
-        ? "The microphone permission has been denied. Please enable the microphone permission on the right side of the browser address bar and try again."
-        : "Unable to access the microphone. Please check your permissions or device and try again.";
-      alert(msg);
+      toast.error("Microphone access failed");
     }
   };
 

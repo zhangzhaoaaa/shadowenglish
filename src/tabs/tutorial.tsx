@@ -1,7 +1,26 @@
 import { Mic } from "lucide-react"
 import "../style.css"
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const chrome: any
+
+function requestMic() {
+  return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    stream.getTracks().forEach((t) => t.stop())
+    try {
+      chrome?.runtime?.sendMessage?.({ type: "spl-mic-granted" })
+    } catch {}
+    try {
+      window.close()
+    } catch {}
+  })
+}
 
 function Tutorial() {
+  const url = new URL(window.location.href)
+  const grant = url.searchParams.get("grantMic")
+  if (grant) {
+    requestMic().catch(() => {})
+  }
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col items-center py-12 px-4">
       
@@ -60,7 +79,6 @@ function Tutorial() {
 
       </div>
 
-      {/* CTA */}
       <div className="text-center space-y-6">
         <button 
           onClick={() => window.open("https://www.youtube.com", "_blank")}
@@ -68,6 +86,14 @@ function Tutorial() {
         >
           Start Practicing Now
         </button>
+        <div>
+          <button
+            onClick={() => requestMic().catch(() => {})}
+            className="mt-3 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-full shadow"
+          >
+            Grant Microphone Access
+          </button>
+        </div>
         <p className="text-slate-500">
           Ready to improve your pronunciation? Head to YouTube and start practicing!
         </p>
