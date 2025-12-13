@@ -4,6 +4,7 @@ import "../style.css"
 declare const chrome: any
 import img1 from "../../assets/1.png"
 import img2 from "../../assets/2.png"
+import img3 from "../../assets/3.png"
 
 function requestMic() {
   return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
@@ -105,9 +106,19 @@ function Tutorial() {
       <div className="mt-10 w-full max-w-4xl">
         <div className="rounded-2xl border border-slate-200 shadow-lg overflow-hidden bg-white">
           <div className="bg-slate-100 px-4 py-2 text-slate-500 text-sm">Preview</div>
-          <div className="p-4 bg-slate-50 space-y-4">
-            <img src={img1} alt="Preview 1" loading="lazy" className="w-full rounded-xl border border-slate-200" />
-            <img src={img2} alt="Preview 2" loading="lazy" className="w-full rounded-xl border border-slate-200" />
+          <div className="p-4 bg-slate-50 space-y-6">
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-md bg-violet-50 text-violet-700 text-lg font-semibold">Listen</div>
+              <img src={img1} alt="Listen preview" loading="lazy" className="w-full rounded-xl border border-slate-200" />
+            </div>
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-md bg-violet-50 text-violet-700 text-lg font-semibold">Repeat</div>
+              <img src={img2} alt="Repeat preview" loading="lazy" className="w-full rounded-xl border border-slate-200" />
+            </div>
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-md bg-violet-50 text-violet-700 text-lg font-semibold">Feedback</div>
+              <img src={img3} alt="Feedback preview" loading="lazy" className="w-full rounded-xl border border-slate-200" />
+            </div>
           </div>
         </div>
       </div>

@@ -33,7 +33,7 @@ function Popup() {
         </button>
 
         <a 
-          href="https://www.youtube.com" 
+          href="https://www.youtube.com/watch?v=3JiVDYL20G4" 
           target="_blank" 
           rel="noreferrer"
           className="text-sm text-slate-500 hover:text-violet-600 transition-colors underline decoration-slate-300 hover:decoration-violet-600 underline-offset-4"

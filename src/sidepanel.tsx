@@ -735,7 +735,7 @@ export default function SidePanel() {
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <ToastViewport />
       <header className="px-6 pt-6 pb-4 flex-shrink-0">
-        <h1 className="text-xl font-bold text-foreground">Shadowing Practice</h1>
+        <h1 className="text-xl font-bold text-foreground">Shadowing Practice Loop</h1>
         <div className="flex flex-row gap-2 justify-between items-center mt-2">
           <div className="text-sm text-muted-foreground">1. Listen</div>
           <div className="text-sm text-muted-foreground">2. Repeat</div>
