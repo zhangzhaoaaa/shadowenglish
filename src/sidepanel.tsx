@@ -263,6 +263,7 @@ export default function SidePanel() {
   const [isExportingWav, setIsExportingWav] = useState(false);
   const isDraggingRef = useRef(false);
   const lastConfettiKeyRef = useRef<string | null>(null);
+  const selectedRangeRef = useRef<{ groupIndex: number; startChar: number; endChar: number } | null>(null);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -413,6 +414,26 @@ export default function SidePanel() {
 
   const computePracticeRange = () => {
     if (practiceGroup.length === 0) return null;
+    const precise = selectedRangeRef.current;
+    if (precise && (precise.groupIndex === practiceGroupIndex || practiceGroupIndex === null)) {
+      const group = practiceGroupIndex !== null ? groupedSegments[practiceGroupIndex] ?? [] : practiceGroup;
+      let cursor = 0;
+      let first: Segment | null = null;
+      let last: Segment | null = null;
+      for (let i = 0; i < group.length; i++) {
+        const seg = group[i];
+        const segStart = cursor;
+        const segEnd = segStart + seg.text.length + (i < group.length - 1 ? 1 : 0);
+        const overlap = segEnd > precise.startChar && segStart < precise.endChar;
+        if (overlap) {
+          if (!first) first = seg;
+          last = seg;
+        }
+        cursor = segEnd;
+      }
+      if (first && last) return { start: first.startSeconds, end: last.endSeconds };
+    }
+
     const normWords = new Set(practiceWords.map((w) => normalizeToken(w)).filter(Boolean));
     let start: number | null = null;
     let end: number | null = null;
@@ -463,18 +484,7 @@ export default function SidePanel() {
         resetRecording();
         setEvaluatedTokens([]);
         setSelectedPracticeWords([]);
-        return;
-      }
-
-      const selectedParts = text
-        .split(/\s+/)
-        .map((t) => t.replace(/[^A-Za-z']/g, "").toLowerCase())
-        .filter((t) => t.length > 0);
-
-      if (selectedParts.length === 0) {
-        resetRecording();
-        setEvaluatedTokens([]);
-        setSelectedPracticeWords([]);
+        selectedRangeRef.current = null;
         return;
       }
 
@@ -483,16 +493,57 @@ export default function SidePanel() {
       const targetIdx = focusIdx ?? anchorIdx ?? practiceGroupIndex;
       if (targetIdx !== null) setSelectedGroupIndex(targetIdx);
 
-      const targetGroup = targetIdx !== null ? groupedSegments[targetIdx] : practiceGroup;
-      const baseWords = tokenize(joinGroupText(targetGroup ?? practiceGroup));
-      const chosen = baseWords.filter((w) => {
-        const norm = normalizeToken(w);
-        return norm && selectedParts.some((p) => norm.includes(p));
-      });
+      const groupEl = targetIdx !== null ? (listEl.querySelector(`[data-idx="${targetIdx}"]`) as HTMLElement | null) : null;
+      const range = sel.rangeCount ? sel.getRangeAt(0) : null;
+      if (!groupEl || !range) {
+        const parts = text
+          .split(/\s+/)
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+        resetRecording();
+        setEvaluatedTokens([]);
+        setSelectedPracticeWords(parts);
+        selectedRangeRef.current = null;
+        return;
+      }
+
+      const walker = document.createTreeWalker(groupEl, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      const starts: number[] = [];
+      let full = "";
+      while (walker.nextNode()) {
+        const tn = walker.currentNode as Text;
+        nodes.push(tn);
+        starts.push(full.length);
+        full += tn.nodeValue || "";
+      }
+
+      const startNode = range.startContainer as Text;
+      const endNode = range.endContainer as Text;
+      const startIndex = nodes.indexOf(startNode);
+      const endIndex = nodes.indexOf(endNode);
+      const startChar = (startIndex >= 0 ? starts[startIndex] : 0) + range.startOffset;
+      const endChar = (endIndex >= 0 ? starts[endIndex] : full.length) + range.endOffset;
+      const a = Math.max(0, Math.min(startChar, endChar));
+      const b = Math.max(0, Math.max(startChar, endChar));
+
+      const tokens = tokenize(full);
+      const positions: { start: number; end: number; text: string }[] = [];
+      let pos = 0;
+      for (const tok of tokens) {
+        const s = full.indexOf(tok, pos);
+        const e = s >= 0 ? s + tok.length : pos;
+        positions.push({ start: s >= 0 ? s : pos, end: e, text: tok });
+        pos = e;
+      }
+      const chosen = positions
+        .filter((p) => p.end > a && p.start < b)
+        .map((p) => p.text);
 
       resetRecording();
       setEvaluatedTokens([]);
       setSelectedPracticeWords(chosen);
+      selectedRangeRef.current = targetIdx !== null ? { groupIndex: targetIdx, startChar: a, endChar: b } : null;
     };
 
     listEl.addEventListener("mouseup", handleSelection);
