@@ -283,6 +283,14 @@ export default function SidePanel() {
   const isDraggingRef = useRef(false);
   const lastConfettiKeyRef = useRef<string | null>(null);
   const selectedRangeRef = useRef<{ groupIndex: number; startChar: number; endChar: number } | null>(null);
+  const [feedback, setFeedback] = useState<
+    | {
+        rating: "excellent" | "good" | "keep-practicing";
+        label: string;
+      }
+    | null
+  >(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -335,6 +343,15 @@ export default function SidePanel() {
       if (allowed.has(saved)) setTheme(saved as typeof theme);
     });
   }, [setTheme]);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current !== null) {
+        window.clearTimeout(feedbackTimeoutRef.current);
+        feedbackTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof chrome === "undefined" || !chrome.storage?.local) return;
@@ -636,6 +653,11 @@ export default function SidePanel() {
     const tokens = evaluatedTokens.filter((t) => normalizeToken(t.text));
     if (tokens.length === 0) {
       lastConfettiKeyRef.current = null;
+      if (feedbackTimeoutRef.current !== null) {
+        window.clearTimeout(feedbackTimeoutRef.current);
+        feedbackTimeoutRef.current = null;
+      }
+      setFeedback(null);
       return;
     }
 
@@ -646,29 +668,46 @@ export default function SidePanel() {
     }
     const accuracy = scoreSum / tokens.length;
     const allNonWrong = tokens.every((t) => t.status === "correct" || t.status === "partial");
-    const shouldCelebrate = allNonWrong && accuracy >= 0.8;
+    let rating: "excellent" | "good" | "keep-practicing";
+    if (allNonWrong && accuracy >= 0.9) rating = "excellent";
+    else if (accuracy >= 0.6) rating = "good";
+    else rating = "keep-practicing";
 
-    if (shouldCelebrate) {
-      if (lastConfettiKeyRef.current === key) return;
-      lastConfettiKeyRef.current = key;
+    const label = rating === "excellent" ? "Excellent" : rating === "good" ? "Good" : "Keep practicing";
+    setFeedback({ rating, label });
 
-      const count = 200;
-      const defaults = { origin: { y: 0.7 } };
-      const fire = (particleRatio: number, opts: Record<string, number>) => {
-        confetti({ ...defaults, ...opts, particleCount: Math.floor(count * particleRatio) });
-      };
+    if (feedbackTimeoutRef.current !== null) {
+      window.clearTimeout(feedbackTimeoutRef.current);
+    }
+    feedbackTimeoutRef.current = window.setTimeout(() => {
+      setFeedback(null);
+      feedbackTimeoutRef.current = null;
+    }, 2000);
 
-      const launch = () => {
-        fire(0.25, { spread: 26, startVelocity: 55 });
-        fire(0.2, { spread: 60 });
-        fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
-        fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
-        fire(0.1, { spread: 120, startVelocity: 45 });
-      };
+    const count = 200;
+    const defaults = { origin: { y: 0.7 } };
+    const fire = (particleRatio: number, opts: Record<string, number>) => {
+      confetti({ ...defaults, ...opts, particleCount: Math.floor(count * particleRatio) });
+    };
+
+    const launch = () => {
+      fire(0.25, { spread: 26, startVelocity: 55 });
+      fire(0.2, { spread: 60 });
+      fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+      fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+      fire(0.1, { spread: 120, startVelocity: 45 });
+    };
+
+    if (rating === "excellent" || rating === "good") {
+      const confettiKey = `${key}__${rating}`;
+      if (lastConfettiKeyRef.current === confettiKey) return;
+      lastConfettiKeyRef.current = confettiKey;
 
       launch();
-      window.setTimeout(launch, 350);
-      window.setTimeout(launch, 700);
+      if (rating === "excellent") {
+        window.setTimeout(launch, 350);
+        window.setTimeout(launch, 700);
+      }
     } else {
       lastConfettiKeyRef.current = null;
     }
@@ -852,7 +891,7 @@ export default function SidePanel() {
 
   useEffect(() => stopDrag, [stopDrag]);
 
-  if (!isReady && rawSegments.length === 0) {
+  if (!isReady || groupedSegments.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">No segments available.Try refreshing the page.</div>
     );
@@ -861,6 +900,11 @@ export default function SidePanel() {
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <ToastViewport />
+      {feedback && (
+        <div className="spl-feedback-overlay">
+          <div className="spl-feedback-inner">{feedback.label}</div>
+        </div>
+      )}
       <header className="px-6 pt-6 pb-4 flex-shrink-0">
         <h1 className="text-xl font-bold text-foreground">Shadowing Practice Loop</h1>
         <div className="flex flex-row gap-2 justify-between items-center mt-2">
