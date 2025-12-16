@@ -463,6 +463,7 @@ export default function SidePanel() {
     if (!audioRef.current || !recordingUrl) return;
     const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
     recordingRepeatRemainingRef.current = safeRepeat;
+    audioRef.current.playbackRate = playbackRate || 1;
     audioRef.current.currentTime = 0;
     setIsRecordingPlaying(true);
     audioRef.current.play();
@@ -731,6 +732,7 @@ export default function SidePanel() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !recordingUrl) return;
+    audio.playbackRate = playbackRate || 1;
     const handleEnded = () => {
       if (recordingRepeatRemainingRef.current > 1) {
         recordingRepeatRemainingRef.current -= 1;
@@ -745,7 +747,7 @@ export default function SidePanel() {
     return () => {
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [recordingUrl]);
+  }, [recordingUrl, playbackRate]);
 
   useEffect(() => {
     if (!recordingUrl) {
