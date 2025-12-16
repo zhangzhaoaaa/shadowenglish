@@ -139,6 +139,9 @@ function evaluateSentence(targetText: string, spokenText: string): EvaluatedToke
   const targetTokens = tokenize(targetText);
   const spokenTokens = tokenize(spokenText);
   const spokenNorm = spokenTokens.map(normalizeToken);
+  const windowSize = 3;
+  const correctThreshold = 0.8;
+  const partialThreshold = 0.5;
 
   let spokenIndex = 0;
 
@@ -152,11 +155,27 @@ function evaluateSentence(targetText: string, spokenText: string): EvaluatedToke
 
     let status: "correct" | "partial" | "wrong" = "wrong";
     if (spokenIndex < spokenNorm.length) {
-      const sim = tokenSimilarity(norm, spokenNorm[spokenIndex]);
-      if (sim >= 0.85) status = "correct";
-      else if (sim >= 0.6) status = "partial";
-      else status = "wrong";
-      spokenIndex += 1;
+      let bestSim = 0;
+      let bestIdx = -1;
+      const maxIdx = Math.min(spokenNorm.length, spokenIndex + windowSize);
+      for (let i = spokenIndex; i < maxIdx; i++) {
+        const candidate = spokenNorm[i];
+        if (!candidate) continue;
+        const sim = tokenSimilarity(norm, candidate);
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestIdx = i;
+          if (bestSim >= correctThreshold) break;
+        }
+      }
+      if (bestIdx !== -1) {
+        if (bestSim >= correctThreshold) status = "correct";
+        else if (bestSim >= partialThreshold) status = "partial";
+        else status = "wrong";
+        spokenIndex = bestIdx + 1;
+      } else {
+        spokenIndex += 1;
+      }
     }
 
     return { text: tok, status };
@@ -613,10 +632,23 @@ export default function SidePanel() {
   }, [practiceTextForEval, finalTranscript, setEvaluatedTokens]);
 
   useEffect(() => {
-    const allCorrect = evaluatedTokens.length > 0 && evaluatedTokens.every((t) => t.status === "correct");
     const key = `${practiceTextForEval}__${finalTranscript}`;
+    const tokens = evaluatedTokens.filter((t) => normalizeToken(t.text));
+    if (tokens.length === 0) {
+      lastConfettiKeyRef.current = null;
+      return;
+    }
 
-    if (allCorrect) {
+    let scoreSum = 0;
+    for (const t of tokens) {
+      if (t.status === "correct") scoreSum += 1;
+      else if (t.status === "partial") scoreSum += 0.7;
+    }
+    const accuracy = scoreSum / tokens.length;
+    const allNonWrong = tokens.every((t) => t.status === "correct" || t.status === "partial");
+    const shouldCelebrate = allNonWrong && accuracy >= 0.8;
+
+    if (shouldCelebrate) {
       if (lastConfettiKeyRef.current === key) return;
       lastConfettiKeyRef.current = key;
 
