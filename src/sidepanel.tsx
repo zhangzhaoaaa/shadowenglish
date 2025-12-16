@@ -294,6 +294,7 @@ export default function SidePanel() {
   >(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
   const recordingRepeatRemainingRef = useRef<number>(0);
+  const [isRecordingPlaying, setIsRecordingPlaying] = useState(false);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -728,12 +729,19 @@ export default function SidePanel() {
         audio.play();
       } else {
         recordingRepeatRemainingRef.current = 0;
+        setIsRecordingPlaying(false);
       }
     };
     audio.addEventListener("ended", handleEnded);
     return () => {
       audio.removeEventListener("ended", handleEnded);
     };
+  }, [recordingUrl]);
+
+  useEffect(() => {
+    if (!recordingUrl) {
+      setIsRecordingPlaying(false);
+    }
   }, [recordingUrl]);
 
   const handleTranslate = () => {
@@ -1155,14 +1163,31 @@ export default function SidePanel() {
                   const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
                   recordingRepeatRemainingRef.current = safeRepeat;
                   audioRef.current.currentTime = 0;
+                  setIsRecordingPlaying(true);
                   audioRef.current.play();
                 }}
                 className={`inline-flex items-center gap-2 px-3 py-1 rounded-md border text-sm transition-colors ${
-                  recordingUrl ? "hover:bg-muted" : "opacity-60 cursor-not-allowed"
+                  recordingUrl
+                    ? isRecordingPlaying
+                      ? "bg-red-600 text-white border-red-600 animate-pulse"
+                      : "hover:bg-muted"
+                    : "opacity-60 cursor-not-allowed"
                 }`}
               >
-                <Play className="w-4 h-4" />
-                <span>My Recording</span>
+                {isRecordingPlaying ? (
+                  <>
+                    <span className="relative flex items-center justify-center">
+                      <span className="absolute inline-flex w-4 h-4 rounded-full bg-red-400 opacity-75 animate-ping" />
+                      <span className="relative w-2 h-2 rounded-full bg-white" />
+                    </span>
+                    <span>My Recording</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    <span>My Recording</span>
+                  </>
+                )}
               </button>
               <button
                 disabled={!recordingUrl || isExportingWav}
