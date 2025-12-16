@@ -459,6 +459,15 @@ export default function SidePanel() {
     return null;
   }, [practiceGroup, currentTime]);
 
+  const playRecordingWithRepeat = () => {
+    if (!audioRef.current || !recordingUrl) return;
+    const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
+    recordingRepeatRemainingRef.current = safeRepeat;
+    audioRef.current.currentTime = 0;
+    setIsRecordingPlaying(true);
+    audioRef.current.play();
+  };
+
   const practiceTokenMap = useMemo(() => {
     const groupTokens: { text: string; segmentIndex: number }[] = [];
     for (let i = 0; i < practiceGroup.length; i++) {
@@ -1142,6 +1151,19 @@ export default function SidePanel() {
                   <SelectItem value="3">Repeat 3x</SelectItem>
                 </SelectContent>
               </Select>
+              <button
+                onClick={() => {
+                  playPracticeSelection();
+                  playRecordingWithRepeat();
+                }}
+                className={`px-3 py-1 rounded-md border text-sm flex items-center gap-1 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:opacity-60 disabled:cursor-not-allowed ${
+                  recordingUrl ? "bg-background text-foreground hover:bg-muted" : "opacity-60 cursor-not-allowed"
+                }`}
+                disabled={!recordingUrl}
+              >
+                <Play className="w-3 h-3" />
+                <span>Play Both</span>
+              </button>
             </div>
               <button
                 onClick={handleSpeakClick}
@@ -1158,14 +1180,7 @@ export default function SidePanel() {
             <div className="flex items-center gap-2">
               <button
                 disabled={!recordingUrl}
-                onClick={() => {
-                  if (!audioRef.current || !recordingUrl) return;
-                  const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
-                  recordingRepeatRemainingRef.current = safeRepeat;
-                  audioRef.current.currentTime = 0;
-                  setIsRecordingPlaying(true);
-                  audioRef.current.play();
-                }}
+                onClick={playRecordingWithRepeat}
                 className={`inline-flex items-center gap-2 px-3 py-1 rounded-md border text-sm transition-colors ${
                   recordingUrl
                     ? isRecordingPlaying
