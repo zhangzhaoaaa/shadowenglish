@@ -405,12 +405,56 @@ export default function SidePanel() {
     return null;
   }, [groupedSegments, currentTime]);
 
-  const practiceGroupIndex = selectedGroupIndex;
+  const practiceGroupIndex = selectedGroupIndex ?? activeGroupIndex;
   const practiceGroup = (practiceGroupIndex !== null) ? (groupedSegments[practiceGroupIndex] ?? []) : [];
   const practiceText = joinGroupText(practiceGroup);
   const practiceWords = selectedPracticeWords.length > 0 ? selectedPracticeWords : tokenize(practiceText);
   const practiceTextForEval = practiceWords.join(" ");
   const hasPractice = practiceWords.length > 0;
+
+  const activePracticeSegmentIndex = useMemo(() => {
+    for (let i = 0; i < practiceGroup.length; i++) {
+      if (isSegmentActive(practiceGroup[i])) return i;
+    }
+    return null;
+  }, [practiceGroup, currentTime]);
+
+  const practiceTokenMap = useMemo(() => {
+    const groupTokens: { text: string; segmentIndex: number }[] = [];
+    for (let i = 0; i < practiceGroup.length; i++) {
+      const toks = tokenize(practiceGroup[i].text);
+      for (const t of toks) groupTokens.push({ text: t, segmentIndex: i });
+    }
+    const result: { text: string; segmentIndex: number | null }[] = [];
+    let pointer = 0;
+    for (const w of practiceWords) {
+      const norm = normalizeToken(w);
+      let found: number | null = null;
+      for (let k = pointer; k < groupTokens.length; k++) {
+        if (normalizeToken(groupTokens[k].text) === norm) {
+          found = groupTokens[k].segmentIndex;
+          pointer = k + 1;
+          break;
+        }
+      }
+      result.push({ text: w, segmentIndex: found });
+    }
+    return result;
+  }, [practiceGroup, practiceWords]);
+
+  const playFromPracticeWord = (index: number) => {
+    const range = computePracticeRange();
+    if (!range) return;
+    const map = practiceTokenMap[index];
+    let start = range.start;
+    if (map && map.segmentIndex !== null) {
+      const seg = practiceGroup[map.segmentIndex];
+      if (seg) start = seg.startSeconds;
+    }
+    const payload = { type: "spl-play-period", start, end: range.end, loop: false };
+    if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
+    else chrome.runtime.sendMessage(payload);
+  };
 
   const computePracticeRange = () => {
     if (practiceGroup.length === 0) return null;
@@ -1034,9 +1078,28 @@ export default function SidePanel() {
             <div>
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-foreground leading-relaxed">
-                    {practiceWords.length ? practiceWords.join(" ") : <span className="text-muted-foreground text-xs">Select text above to start practicing</span>}
-                  </p>
+                  {practiceWords.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {practiceTokenMap.map((tok, idx) => {
+                        const isActive = activePracticeSegmentIndex !== null && tok.segmentIndex === activePracticeSegmentIndex;
+                        return (
+                          <span
+                            key={idx}
+                            data-practice-token-index={idx}
+                            data-active={isActive ? "true" : "false"}
+                            className={`inline-block px-1 rounded-md cursor-pointer transition-all border ${
+                              isActive ? "border-primary" : "border-transparent"
+                            } hover:shadow-sm hover:bg-muted`}
+                            onClick={() => playFromPracticeWord(idx)}
+                          >
+                            {tok.text}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">Select text above to start practicing</p>
+                  )}
                 </div>
               </div>
             </div>
