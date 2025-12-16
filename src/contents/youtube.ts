@@ -17,6 +17,7 @@ let periodEnd = 0;
 let playOnceActive = false;
 let loopCheckTimer: number | null = null;
 const STOP_SNAP = 0.02; // keep cursor inside the target segment
+let finiteLoopCount = 1;
 
 const findVideo = () => document.querySelector("video.html5-main-video") as HTMLVideoElement || document.querySelector("video") as HTMLVideoElement;
 const getCurrentVideoId = () => new URLSearchParams(window.location.search).get("v") ?? null;
@@ -57,6 +58,15 @@ const ensureLoopTimer = () => {
         loopActive = false;
         playOnceActive = false;
         stopLoopTimer();
+      } else if (finiteLoopCount > 1) {
+        finiteLoopCount -= 1;
+        video.currentTime = periodStart;
+      } else if (finiteLoopCount === 1) {
+        const snapTime = Math.max(periodStart, periodEnd - STOP_SNAP);
+        video.pause();
+        video.currentTime = snapTime;
+        loopActive = false;
+        stopLoopTimer();
       } else {
         video.currentTime = periodStart;
       }
@@ -86,6 +96,16 @@ const handleProgress = () => {
       currentTime = snapTime;
       loopActive = false;
       playOnceActive = false;
+      stopLoopTimer();
+    } else if (finiteLoopCount > 1) {
+      finiteLoopCount -= 1;
+      video.currentTime = periodStart;
+    } else if (finiteLoopCount === 1) {
+      const snapTime = Math.max(periodStart, periodEnd - STOP_SNAP);
+      video.pause();
+      video.currentTime = snapTime;
+      currentTime = snapTime;
+      loopActive = false;
       stopLoopTimer();
     } else {
       video.currentTime = periodStart;
@@ -150,6 +170,7 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) 
       loopActive = false;
       playOnceActive = false;
       stopLoopTimer();
+      finiteLoopCount = 1;
       video?.play();
       break;
     case "spl-pause":
@@ -159,6 +180,7 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) 
       loopActive = false;
       playOnceActive = false;
       stopLoopTimer();
+      finiteLoopCount = 1;
       break;
     case "spl-set-speed":
       if (video) video.playbackRate = msg.speed;
@@ -170,8 +192,16 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) 
       if (video && typeof msg.start === "number" && typeof msg.end === "number") {
         periodStart = Math.max(0, msg.start);
         periodEnd = Math.max(periodStart, msg.end);
-        loopActive = true; // ensure timeupdate checks and pauses when playOnceActive
-        playOnceActive = !msg.loop;
+        const hasRepeat = typeof msg.repeatCount === "number" && msg.repeatCount > 1;
+        if (hasRepeat) {
+          finiteLoopCount = msg.repeatCount;
+          loopActive = true;
+          playOnceActive = false;
+        } else {
+          finiteLoopCount = msg.loop ? 0 : 1;
+          loopActive = true;
+          playOnceActive = !msg.loop;
+        }
         video.currentTime = periodStart;
         video.play();
         ensureLoopTimer();
@@ -181,8 +211,16 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) 
       if (video && typeof msg.start === "number" && typeof msg.end === "number") {
         periodStart = Math.max(0, msg.start);
         periodEnd = Math.max(periodStart, msg.end);
-        loopActive = true;
-        playOnceActive = true;
+        const hasRepeat = typeof msg.repeatCount === "number" && msg.repeatCount > 1;
+        if (hasRepeat) {
+          finiteLoopCount = msg.repeatCount;
+          loopActive = true;
+          playOnceActive = false;
+        } else {
+          finiteLoopCount = 1;
+          loopActive = true;
+          playOnceActive = true;
+        }
         video.currentTime = periodStart;
         video.play();
         ensureLoopTimer();

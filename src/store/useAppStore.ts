@@ -8,6 +8,7 @@ type AppState = {
   isReady: boolean
   autoScroll: boolean
   playbackRate: number
+  repeatCount: number
   selectedGroupIndex: number | null
   theme: "default" | "vibrant-forest" | "warm-orange" | "serene-violet" | "cool-mint" | "dark-night"
   language: string | null
@@ -25,6 +26,7 @@ type AppState = {
   setIsReady: (ready: boolean) => void
   setAutoScroll: (value: boolean) => void
   setPlaybackRate: (rate: number) => void
+  setRepeatCount: (value: number) => void
   setSelectedGroupIndex: (idx: number | null) => void
   setTheme: (value: AppState["theme"]) => void
   setLanguage: (lang: string | null) => void
@@ -47,6 +49,7 @@ export const useAppStore = create<AppState>((set) => ({
   isReady: false,
   autoScroll: true,
   playbackRate: 1,
+  repeatCount: 1,
   selectedGroupIndex: null,
   theme: "default",
   language: null,
@@ -64,6 +67,7 @@ export const useAppStore = create<AppState>((set) => ({
   setIsReady: (isReady) => set({ isReady }),
   setAutoScroll: (autoScroll) => set({ autoScroll }),
   setPlaybackRate: (playbackRate) => set({ playbackRate }),
+  setRepeatCount: (repeatCount) => set({ repeatCount }),
   setSelectedGroupIndex: (selectedGroupIndex) => set({ selectedGroupIndex }),
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => set({ language }),

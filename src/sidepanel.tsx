@@ -243,6 +243,7 @@ export default function SidePanel() {
     isReady,
     autoScroll,
     playbackRate,
+    repeatCount,
     selectedGroupIndex,
     theme,
     language,
@@ -260,6 +261,7 @@ export default function SidePanel() {
     setIsReady,
     setAutoScroll,
     setPlaybackRate,
+    setRepeatCount,
     setSelectedGroupIndex,
     setTheme,
     setLanguage,
@@ -291,6 +293,7 @@ export default function SidePanel() {
     | null
   >(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
+  const recordingRepeatRemainingRef = useRef<number>(0);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -487,7 +490,8 @@ export default function SidePanel() {
       const seg = practiceGroup[map.segmentIndex];
       if (seg) start = seg.startSeconds;
     }
-    const payload = { type: "spl-play-period", start, end: range.end, loop: false };
+    const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
+    const payload = { type: "spl-play-period", start, end: range.end, loop: false, repeatCount: safeRepeat };
     if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
     else chrome.runtime.sendMessage(payload);
   };
@@ -535,7 +539,8 @@ export default function SidePanel() {
   const playPracticeSelection = () => {
     const range = computePracticeRange();
     if (!range) return;
-    const payload = { type: "spl-play-segment", start: range.start, end: range.end };
+    const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
+    const payload = { type: "spl-play-segment", start: range.start, end: range.end, repeatCount: safeRepeat };
     if (tabId !== null) chrome.tabs.sendMessage(tabId, { ...payload, tabId });
     else chrome.runtime.sendMessage(payload);
   };
@@ -712,6 +717,24 @@ export default function SidePanel() {
       lastConfettiKeyRef.current = null;
     }
   }, [evaluatedTokens, finalTranscript, practiceTextForEval]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !recordingUrl) return;
+    const handleEnded = () => {
+      if (recordingRepeatRemainingRef.current > 1) {
+        recordingRepeatRemainingRef.current -= 1;
+        audio.currentTime = 0;
+        audio.play();
+      } else {
+        recordingRepeatRemainingRef.current = 0;
+      }
+    };
+    audio.addEventListener("ended", handleEnded);
+    return () => {
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, [recordingUrl]);
 
   const handleTranslate = () => {
     if (!hasPractice) return;
@@ -1093,6 +1116,24 @@ export default function SidePanel() {
               >
                 <span>0.5x</span>
               </button>
+              <Select
+                value={String(repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1)}
+                onValueChange={(value) => {
+                  const num = Number(value);
+                  if (!Number.isFinite(num)) return;
+                  const clamped = num > 0 ? Math.min(Math.max(num, 1), 3) : 1;
+                  setRepeatCount(clamped);
+                }}
+              >
+                <SelectTrigger className="w-[90px] h-8 text-xs">
+                  <SelectValue placeholder="Repeat" />
+                </SelectTrigger>
+                <SelectContent className="text-xs">
+                  <SelectItem value="1">Repeat 1x</SelectItem>
+                  <SelectItem value="2">Repeat 2x</SelectItem>
+                  <SelectItem value="3">Repeat 3x</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
               <button
                 onClick={handleSpeakClick}
@@ -1111,6 +1152,8 @@ export default function SidePanel() {
                 disabled={!recordingUrl}
                 onClick={() => {
                   if (!audioRef.current || !recordingUrl) return;
+                  const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
+                  recordingRepeatRemainingRef.current = safeRepeat;
                   audioRef.current.currentTime = 0;
                   audioRef.current.play();
                 }}
