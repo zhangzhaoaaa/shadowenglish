@@ -295,8 +295,35 @@ export default function SidePanel() {
   const feedbackTimeoutRef = useRef<number | null>(null);
   const recordingRepeatRemainingRef = useRef<number>(0);
   const [isRecordingPlaying, setIsRecordingPlaying] = useState(false);
+  const [displayTime, setDisplayTime] = useState(currentTime);
+  const timeSyncRef = useRef<{ time: number; perf: number }>({ time: currentTime, perf: 0 });
+  const lastDisplayUpdateRef = useRef(0);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  useEffect(() => {
+    timeSyncRef.current = { time: currentTime, perf: performance.now() };
+    setDisplayTime(currentTime);
+  }, [currentTime]);
+
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      if (isPlaying) {
+        const now = performance.now();
+        const base = timeSyncRef.current;
+        const speed = playbackRate || 1;
+        const t = base.time + ((now - base.perf) / 1000) * speed;
+        if (now - lastDisplayUpdateRef.current >= 50) {
+          lastDisplayUpdateRef.current = now;
+          setDisplayTime(t);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, playbackRate]);
 
   const handlePointerMove = useCallback((ev: PointerEvent) => {
     if (!isDraggingRef.current) return;
@@ -435,7 +462,7 @@ export default function SidePanel() {
     if (hasPractice) playPracticeSelection();
   };
 
-  const isSegmentActive = (seg: Segment) => currentTime >= seg.startSeconds && currentTime < seg.endSeconds;
+  const isSegmentActive = (seg: Segment) => displayTime >= seg.startSeconds && displayTime < seg.endSeconds;
   const isGroupActive = (group: Segment[]) => group.some(isSegmentActive);
 
   const activeGroupIndex = useMemo(() => {
@@ -443,7 +470,7 @@ export default function SidePanel() {
       if (isGroupActive(groupedSegments[i])) return i;
     }
     return null;
-  }, [groupedSegments, currentTime]);
+  }, [groupedSegments, displayTime]);
 
   const practiceGroupIndex = selectedGroupIndex ?? activeGroupIndex;
   const practiceGroup = (practiceGroupIndex !== null) ? (groupedSegments[practiceGroupIndex] ?? []) : [];
@@ -457,7 +484,19 @@ export default function SidePanel() {
       if (isSegmentActive(practiceGroup[i])) return i;
     }
     return null;
-  }, [practiceGroup, currentTime]);
+  }, [practiceGroup, displayTime]);
+
+  const activePracticeWord = useMemo(() => {
+    if (activePracticeSegmentIndex === null) return null;
+    const seg = practiceGroup[activePracticeSegmentIndex];
+    if (!seg) return null;
+    const toks = tokenize(seg.text);
+    if (toks.length === 0) return null;
+    const dur = Math.max(seg.endSeconds - seg.startSeconds, 0.001);
+    const progress = clamp((displayTime - seg.startSeconds) / dur, 0, 0.999999);
+    const wordIndex = Math.min(toks.length - 1, Math.floor(progress * toks.length));
+    return { segmentIndex: activePracticeSegmentIndex, wordIndex };
+  }, [activePracticeSegmentIndex, practiceGroup, displayTime]);
 
   const playRecordingWithRepeat = () => {
     if (!audioRef.current || !recordingUrl) return;
@@ -470,24 +509,28 @@ export default function SidePanel() {
   };
 
   const practiceTokenMap = useMemo(() => {
-    const groupTokens: { text: string; segmentIndex: number }[] = [];
+    const groupTokens: { text: string; segmentIndex: number; wordIndex: number }[] = [];
     for (let i = 0; i < practiceGroup.length; i++) {
       const toks = tokenize(practiceGroup[i].text);
-      for (const t of toks) groupTokens.push({ text: t, segmentIndex: i });
+      for (let j = 0; j < toks.length; j++) {
+        groupTokens.push({ text: toks[j], segmentIndex: i, wordIndex: j });
+      }
     }
-    const result: { text: string; segmentIndex: number | null }[] = [];
+    const result: { text: string; segmentIndex: number | null; wordIndex: number | null }[] = [];
     let pointer = 0;
     for (const w of practiceWords) {
       const norm = normalizeToken(w);
       let found: number | null = null;
+      let foundWordIndex: number | null = null;
       for (let k = pointer; k < groupTokens.length; k++) {
         if (normalizeToken(groupTokens[k].text) === norm) {
           found = groupTokens[k].segmentIndex;
+          foundWordIndex = groupTokens[k].wordIndex;
           pointer = k + 1;
           break;
         }
       }
-      result.push({ text: w, segmentIndex: found });
+      result.push({ text: w, segmentIndex: found, wordIndex: foundWordIndex });
     }
     return result;
   }, [practiceGroup, practiceWords]);
@@ -499,7 +542,20 @@ export default function SidePanel() {
     let start = range.start;
     if (map && map.segmentIndex !== null) {
       const seg = practiceGroup[map.segmentIndex];
-      if (seg) start = seg.startSeconds;
+      if (seg) {
+        if (map.wordIndex !== null) {
+          const toks = tokenize(seg.text);
+          const n = toks.length;
+          const dur = Math.max(seg.endSeconds - seg.startSeconds, 0);
+          if (n > 0 && dur > 0) {
+            start = seg.startSeconds + dur * clamp(map.wordIndex / n, 0, 0.999999);
+          } else {
+            start = seg.startSeconds;
+          }
+        } else {
+          start = seg.startSeconds;
+        }
+      }
     }
     const safeRepeat = repeatCount > 0 ? Math.min(Math.max(repeatCount, 1), 3) : 1;
     const payload = { type: "spl-play-period", start, end: range.end, loop: false, repeatCount: safeRepeat };
@@ -654,7 +710,7 @@ export default function SidePanel() {
     if (!autoScroll || !listRef.current) return;
     const activeEl = listRef.current.querySelector('[data-active="true"]');
     if (activeEl) activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [currentTime, autoScroll]);
+  }, [displayTime, autoScroll]);
 
   useEffect(() => {
     if (!practiceTextForEval || !finalTranscript) {
@@ -1000,17 +1056,43 @@ export default function SidePanel() {
                         <p className="text-foreground leading-relaxed">
                           {group.map((seg, segIndex) => {
                             const active = isSegmentActive(seg);
+                            const toks = active ? tokenize(seg.text) : [];
+                            const dur = Math.max(seg.endSeconds - seg.startSeconds, 0.001);
+                            const progress = active ? clamp((displayTime - seg.startSeconds) / dur, 0, 0.999999) : 0;
+                            const wordIndex = active && toks.length > 0 ? Math.min(toks.length - 1, Math.floor(progress * toks.length)) : -1;
                             return (
                               <span key={segIndex}>
                                 <span
-                                  className={`cursor-pointer text-foreground ${
-                                    active ? "underline decoration-blue-500 decoration-2 underline-offset-2" : ""
-                                  }`}
+                                  className="cursor-pointer text-foreground"
                                   data-segment-start-seconds={seg.startSeconds}
                                   data-segment-end-seconds={seg.endSeconds}
                                   onClick={() => playSegment(seg)}
                                 >
-                                  {seg.text}
+                                  {active && toks.length > 1
+                                    ? toks.map((t, i) => (
+                                        <span
+                                          key={i}
+                                          className={
+                                            i === wordIndex
+                                              ? "underline decoration-blue-500 decoration-2 underline-offset-2"
+                                              : ""
+                                          }
+                                        >
+                                          {t}
+                                          {i < toks.length - 1 ? " " : ""}
+                                        </span>
+                                      ))
+                                    : (
+                                        <span
+                                          className={
+                                            active
+                                              ? "underline decoration-blue-500 decoration-2 underline-offset-2"
+                                              : ""
+                                          }
+                                        >
+                                          {seg.text}
+                                        </span>
+                                      )}
                                 </span>
                                 {segIndex < group.length - 1 && <span> </span>}
                               </span>
@@ -1242,7 +1324,12 @@ export default function SidePanel() {
                   {practiceWords.length ? (
                     <div className="flex flex-wrap gap-1">
                       {practiceTokenMap.map((tok, idx) => {
-                        const isActive = activePracticeSegmentIndex !== null && tok.segmentIndex === activePracticeSegmentIndex;
+                        const isActive =
+                          activePracticeWord !== null &&
+                          tok.segmentIndex !== null &&
+                          tok.wordIndex !== null &&
+                          tok.segmentIndex === activePracticeWord.segmentIndex &&
+                          tok.wordIndex === activePracticeWord.wordIndex;
                         return (
                           <span
                             key={idx}
