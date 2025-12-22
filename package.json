@@ -1,6 +1,6 @@
 {
   "name": "shadowing-practice-loop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.0.0",
@@ -54,7 +54,7 @@
     "web_accessible_resources": [
       {
         "resources": [
-          "src/public/pageWorld.sec.js"
+          "src/public/pageWorld.inject.js"
         ],
         "matches": [
           "*://*.youtube.com/*"
