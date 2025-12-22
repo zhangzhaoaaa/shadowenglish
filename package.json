@@ -39,12 +39,10 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "manifest": {
-    "name": "Shadowing Practice Loop – English, Spanish, French Speaking Practice",
+    "name": "Shadowing Practice Loop",
     "description": "Practice English, Spanish, French speaking on YouTube. Repeat phrases, get instant feedback",
     "permissions": [
       "sidePanel",
-      "activeTab",
-      "scripting",
       "storage",
       "tabs"
     ],

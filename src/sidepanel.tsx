@@ -386,9 +386,22 @@ export default function SidePanel() {
 
   useEffect(() => {
     if (typeof chrome === "undefined" || !chrome.storage?.local) return;
-    // Persist theme selection for next sessions
     chrome.storage.local.set({ "spl-theme": theme });
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+    chrome.storage.local.get(["spl-target-language"], (res: any) => {
+      const saved = res?.["spl-target-language"];
+      const allowed = new Set(TARGET_LANGUAGES.map((t) => t.code));
+      if (typeof saved === "string" && allowed.has(saved)) setTargetLanguage(saved);
+    });
+  }, [setTargetLanguage]);
+
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+    chrome.storage.local.set({ "spl-target-language": targetLanguage });
+  }, [targetLanguage]);
 
   useEffect(() => {
     chrome.runtime.sendMessage({ type: "spl-get-tab-id" }, (res: any) => {
@@ -1312,7 +1325,7 @@ export default function SidePanel() {
                 <span>Copy</span>
               </button>
               <span>
-                {isRecording ? `Recording... ${interimTranscript}` : recordingUrl ? "Playback recent recording" : "No recording available"}
+                {isRecording ? "Recording..." : recordingUrl ? "Playback recent recording" : "No recording available"}
               </span>
             </div>
           </div>
